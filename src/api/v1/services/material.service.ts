@@ -19,8 +19,7 @@ export class MaterialService {
     async createMaterial(data: CreateMaterialDto, sectionId: number): Promise<Material> {
         const lastMaterials = await materialRepository.findAll(sectionId);
         const order = lastMaterials.length + 1;
-        data.order = order;
-        return await materialRepository.create({ ...data, xp: 10, sectionId });
+        return await materialRepository.create({ ...data, order, xp: 10, sectionId });
     }
 
     async updateMaterial(id: number, data: UpdateMaterialDto): Promise<Material> {
