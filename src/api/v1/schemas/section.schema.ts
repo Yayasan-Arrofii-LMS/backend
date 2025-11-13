@@ -14,6 +14,7 @@ export const CreateSectionSchema = z.object({
         .int('Order must be an integer')
         .positive('Order must be positive')
         .optional(),
+    video_link: z.string().url('Video link must be a valid URL').optional().nullable(),
 });
 
 

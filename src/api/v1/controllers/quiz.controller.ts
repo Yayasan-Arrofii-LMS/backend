@@ -33,11 +33,11 @@ export class QuizController {
     static async createQuiz(req: Request, res: Response) {
         try {
             const sectionId = parseInt(req.params.sectionId);
-            
+
             console.log('Params:', req.params);
             console.log('Parsed sectionId:', sectionId);
             console.log('Body:', req.body);
-            
+
             if (isNaN(sectionId) || !sectionId) {
                 return sendResponse({
                     res,

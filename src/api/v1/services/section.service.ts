@@ -12,6 +12,7 @@ class SectionService {
                     id: true,
                     title: true,
                     description: true,
+                    video_link: true,
                     order: true,
                     Material: {
                         select: {
@@ -84,6 +85,7 @@ class SectionService {
                 data: {
                     title: data.title,
                     description: data.description,
+                    video_link: data.video_link,
                     classId,
                     order: newOrder,
                 },
