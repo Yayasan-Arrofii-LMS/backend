@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE `Quiz_Attempt` ADD COLUMN `is_graded` BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN `started_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    ADD COLUMN `submitted_at` DATETIME(3) NULL,
+    MODIFY `score` INTEGER NULL;

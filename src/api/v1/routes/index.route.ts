@@ -9,6 +9,7 @@ import { User } from "@prisma/client";
 import materialRouter from "./material.route";
 import materialFileRouter from "./materialFile.route";
 import sectionRouter from "./section.route";
+import quizRouter from "./quiz.route";
 import upload from "../../../config/multer.config";
 import fileRouter from "./file.route";
 import publicRouter from "./public.route";
@@ -29,6 +30,7 @@ router.use("/dashboard", authMiddleware, verifyRole(["Admin"]), dashboardRouter)
 router.use("/classes", authMiddleware, verifyRole(["Admin", "Teacher"]), classRouter);
 router.use("/classes/:classId/sections", sectionRouter);
 router.use("/classes/sections/:sectionId/materials", materialRouter);
+router.use("/classes/sections/:sectionId/quizzes", quizRouter);
 router.use("/classes/sections/materials/:materialId/files", materialFileRouter);
 router.use("/", authRouter)
 router.use("/public", publicRouter)

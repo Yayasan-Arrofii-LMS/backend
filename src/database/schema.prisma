@@ -227,7 +227,10 @@ model Quiz_Answer {
 
 model Quiz_Attempt {
   id            Int             @id @default(autoincrement())
-  score         Int
+  score         Int?
+  started_at    DateTime        @default(now())
+  submitted_at  DateTime?
+  is_graded     Boolean         @default(false)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   userId        String
