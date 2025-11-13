@@ -123,6 +123,7 @@ model Material {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   sectionId     Int
+  order         Int
   Section       Section         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   Material_File Material_File[]
   User_Material User_Material[]

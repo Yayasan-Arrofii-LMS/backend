@@ -9,6 +9,7 @@ export class MaterialRepository {
             include: {
                 Material_File: true,
             },
+            orderBy: { order: 'asc' },
         });
     }
 
@@ -27,6 +28,7 @@ export class MaterialRepository {
         content: string;
         xp: number;
         sectionId: number;
+        order: number;
     }): Promise<Material> {
 
         return await prisma.material.create({
@@ -42,6 +44,7 @@ export class MaterialRepository {
         content: string;
         xp: number;
         sectionId: number;
+        order: number;
     }>): Promise<Material> {
         return await prisma.material.update({
             where: { id },

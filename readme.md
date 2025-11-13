@@ -91,7 +91,7 @@ The following npm scripts are available:
 ├── .env                  # Environment variables (development)
 ├── .env.prod             # Environment variables (production)
 ├── .env.test             # Environment variables (testing)
-├── .eslintignore         # ESLint ignore configuration
+├── .eslintignore         # ESLint ignore configuration1
 ├── .gitignore            # Git ignore file
 ├── .gitlab-ci.yml        # GitLab CI/CD configuration
 ├── commit-standardization.md  # Commit message guidelines

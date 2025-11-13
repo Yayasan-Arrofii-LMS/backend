@@ -17,14 +17,19 @@ export class MaterialService {
     }
 
     async createMaterial(data: CreateMaterialDto, sectionId: number): Promise<Material> {
+        const lastMaterials = await materialRepository.findAll(sectionId);
+        const order = lastMaterials.length + 1;
+        data.order = order;
         return await materialRepository.create({ ...data, xp: 10, sectionId });
     }
 
     async updateMaterial(id: number, data: UpdateMaterialDto): Promise<Material> {
         const material = await materialRepository.findById(id);
+
         if (!material) {
             throw new NotFoundError('Material not found');
         }
+
         return await materialRepository.update(id, data);
     }
 

@@ -1,7 +1,6 @@
-import { PrismaClient, Section } from '@prisma/client';
+import { Section } from '@prisma/client';
 import { CreateSectionInput, UpdateSectionInput } from '../schemas/section.schema';
-
-const prisma = new PrismaClient();
+import prisma from '../../../database';
 
 class SectionService {
     async getAllSections(classId: string): Promise<Partial<Section>[]> {

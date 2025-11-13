@@ -114,18 +114,20 @@ class ClassRepository {
                             userId: userId
                         }
                     },
-                    OR: search ? [
-                        {
-                            name: {
-                                contains: search,
-                            }
-                        },
-                        {
-                            description: {
-                                contains: search,
-                            }
-                        }
-                    ] : [],
+                    AND: search ? {
+                        OR: [
+                            {
+                                name: {
+                                    contains: search,
+                                }
+                            },
+                            {
+                                description: {
+                                    contains: search,
+                                }
+                            },
+                        ]
+                    } : {}
                 },
                 skip,
                 take,
@@ -135,7 +137,6 @@ class ClassRepository {
                 select: safeClassFields,
             });
         }
-
         return classes.map((classData) => {
             const appUrl = (process.env.APP_URL || "http://localhost").replace(/\/$/, "") + `:${process.env.PORT || 3001}`;
             const imagePathRelative = `${appUrl}/${classData.image_path}`.replace(/\/$/, "");
