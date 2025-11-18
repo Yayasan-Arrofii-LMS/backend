@@ -36,7 +36,7 @@ class ClassRepository {
                         userId: userId
                     }
                 }
-                , OR: search ? [
+                , AND: search ? [
                     {
                         name: {
                             contains: search,
@@ -144,7 +144,6 @@ class ClassRepository {
             return { ...classData, image_path_relative: imagePathRelative };
         });
     }
-
     async updateClass(classId: number, data: { name: string; description: string, image_path: string }) {
         return await prisma.class.update({
             where: { id: classId },

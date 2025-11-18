@@ -15,4 +15,4 @@ export const updateMaterialSchema = z.object({
 });
 
 export type CreateMaterialDto = z.infer<typeof createMaterialSchema>;
-export type UpdateMaterialDto = z.infer<typeof updateMaterialSchema>;
+export type UpdateMaterialDto = z.infer<typeof updateMaterialSchema>; 
