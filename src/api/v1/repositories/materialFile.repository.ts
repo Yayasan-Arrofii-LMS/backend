@@ -1,29 +1,44 @@
 import { PrismaClient, Material_File } from "@prisma/client";
 import prisma from "../../../database";
+import { generateFileToken } from "../helpers/fileToken";
 
+type MaterialFileWithUrl = Material_File & { url: string };
 
 export class MaterialFileRepository {
-    async findAll(): Promise<Material_File[]> {
-        return await prisma.material_File.findMany();
+    private transformWithToken(materialFile: Material_File): MaterialFileWithUrl {
+        const appUrl = (process.env.APP_URL || "http://localhost").replace(/\/$/, "") + `:${process.env.PORT || 3001}`;
+        const token = generateFileToken(materialFile.path, 60);
+        return {
+            ...materialFile,
+            url: `${appUrl}/files/protected/${token}`
+        };
     }
 
-    async findById(id: number): Promise<Material_File | null> {
-        return await prisma.material_File.findUnique({
+    async findAll(): Promise<MaterialFileWithUrl[]> {
+        const files = await prisma.material_File.findMany();
+        return files.map(file => this.transformWithToken(file));
+    }
+
+    async findById(id: number): Promise<MaterialFileWithUrl | null> {
+        const file = await prisma.material_File.findUnique({
             where: { id },
         });
+        return file ? this.transformWithToken(file) : null;
     }
 
-    async create(data: { title: string; path: string; materialId: number }): Promise<Material_File> {
-        return await prisma.material_File.create({
+    async create(data: { title: string; path: string; materialId: number }): Promise<MaterialFileWithUrl> {
+        const file = await prisma.material_File.create({
             data,
         });
+        return this.transformWithToken(file);
     }
 
-    async update(id: number, data: Partial<{ title: string; path: string }>): Promise<Material_File | null> {
-        return await prisma.material_File.update({
+    async update(id: number, data: Partial<{ title: string; path: string }>): Promise<MaterialFileWithUrl | null> {
+        const file = await prisma.material_File.update({
             where: { id },
             data,
         });
+        return this.transformWithToken(file);
     }
 
     async delete(id: number): Promise<Material_File | null> {

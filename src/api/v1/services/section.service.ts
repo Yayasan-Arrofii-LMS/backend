@@ -1,11 +1,67 @@
-import { Section } from '@prisma/client';
+import { Section, Material_File } from '@prisma/client';
 import { CreateSectionInput, UpdateSectionInput } from '../schemas/section.schema';
 import prisma from '../../../database';
+import { generateFileToken } from '../helpers/fileToken';
+
+type MaterialFileWithUrl = Material_File & { url: string };
+
+type SectionMaterial = {
+    id: number;
+    title: string;
+    content: string;
+    Material_File: { id: number; path: string }[];
+};
+
+type SectionMaterialWithUrl = {
+    id: number;
+    title: string;
+    content: string;
+    Material_File: MaterialFileWithUrl[];
+};
+
+type SectionData = {
+    id: number;
+    title: string;
+    description: string | null;
+    video_link: string | null;
+    order: number;
+    Material: SectionMaterial[];
+    Quiz: {
+        id: number;
+        title: string;
+        description: string;
+        close_at: Date;
+        open_at: Date;
+    }[];
+};
+
+type SectionDataWithUrl = Omit<SectionData, 'Material'> & {
+    Material: SectionMaterialWithUrl[];
+};
 
 class SectionService {
-    async getAllSections(classId: string): Promise<Partial<Section>[]> {
+    private transformMaterialFiles(sections: SectionData[]): SectionDataWithUrl[] {
+        const appUrl = (process.env.APP_URL || "http://localhost").replace(/\/$/, "") + `:${process.env.PORT || 3001}`;
+
+        return sections.map(section => ({
+            ...section,
+            Material: section.Material.map((material) => ({
+                ...material,
+                Material_File: material.Material_File.map((file) => ({
+                    ...file,
+                    title: '',
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    materialId: 0,
+                    url: `${appUrl}/files/protected/${generateFileToken(file.path, 60)}`
+                }))
+            }))
+        }));
+    }
+
+    async getAllSections(classId: string): Promise<SectionDataWithUrl[]> {
         try {
-            return await prisma.section.findMany({
+            const sections = await prisma.section.findMany({
                 where: { classId: parseInt(classId) },
                 orderBy: { order: 'asc' },
                 select: {
@@ -38,8 +94,10 @@ class SectionService {
                     }
                 }
             });
-        } catch (error: any) {
-            throw new Error(`Failed to fetch sections: ${error.message}`);
+            return this.transformMaterialFiles(sections);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            throw new Error(`Failed to fetch sections: ${message}`);
         }
     }
 
@@ -68,8 +126,9 @@ class SectionService {
                     }
                 }
             });
-        } catch (error: any) {
-            throw new Error(`Failed to fetch sections: ${error.message}`);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            throw new Error(`Failed to fetch sections: ${message}`);
         }
     }
 
@@ -87,8 +146,9 @@ class SectionService {
                 throw new Error('Section not found');
             }
             return section;
-        } catch (error: any) {
-            throw new Error(`Failed to fetch section: ${error.message}`);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            throw new Error(`Failed to fetch section: ${message}`);
         }
     }
 
@@ -110,8 +170,9 @@ class SectionService {
                     order: newOrder,
                 },
             });
-        } catch (error: any) {
-            throw new Error(`Failed to create section: ${error.message}`);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            throw new Error(`Failed to create section: ${message}`);
         }
     }
 
@@ -127,8 +188,9 @@ class SectionService {
                 where: { id: parseInt(sectionId) },
                 data,
             });
-        } catch (error: any) {
-            throw new Error(`Failed to update section: ${error.message}`);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            throw new Error(`Failed to update section: ${message}`);
         }
     }
 
@@ -143,8 +205,9 @@ class SectionService {
             return await prisma.section.delete({
                 where: { id: parseInt(sectionId) },
             });
-        } catch (error: any) {
-            throw new Error(`Failed to delete section: ${error.message}`);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            throw new Error(`Failed to delete section: ${message}`);
         }
     }
 }
