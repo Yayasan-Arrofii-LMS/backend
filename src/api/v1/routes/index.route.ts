@@ -12,8 +12,9 @@ import sectionRouter from "./section.route";
 import quizRouter from "./quiz.route";
 import enrollmentRouter from "./enrollment.route";
 import upload from "../../../config/multer.config";
-import fileRouter from "./file.route";
 import publicRouter from "./public.route";
+import profileRouter from "./profile.route";
+
 
 const router = Router();
 upload;
@@ -35,7 +36,10 @@ router.use("/classes/sections/:sectionId/quizzes", quizRouter);
 router.use("/classes/sections/materials/:materialId/files", materialFileRouter);
 router.use("/enrollment", enrollmentRouter);
 router.use("/", authRouter)
+router.use("/students", authMiddleware, verifyRole(["Student", "Admin"]),);
 router.use("/public", publicRouter)
+router.use("/profile", profileRouter);
+
 
 
 export default router;
