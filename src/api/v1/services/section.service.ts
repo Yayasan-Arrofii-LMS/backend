@@ -27,16 +27,6 @@ class SectionService {
                             },
                         },
                     },
-                    Assignment: {
-                        select: {
-                            id: true,
-                            title: true,
-                            description: true,
-                            close_at: true,
-                            open_at: true,
-                        }
-
-                    },
                     Quiz: {
                         select: {
                             id: true,
@@ -44,6 +34,36 @@ class SectionService {
                             description: true,
                             close_at: true,
                             open_at: true,
+                        }
+                    }
+                }
+            });
+        } catch (error: any) {
+            throw new Error(`Failed to fetch sections: ${error.message}`);
+        }
+    }
+
+    async getAllSectionsPublic(classId: string): Promise<Partial<Section>[]> {
+        try {
+            return await prisma.section.findMany({
+                where: { classId: parseInt(classId) },
+                orderBy: { order: 'asc' },
+                select: {
+                    id: true,
+                    title: true,
+                    description: true,
+                    video_link: true,
+                    order: true,
+                    Material: {
+                        select: {
+                            id: true,
+                            title: true,
+                        },
+                    },
+                    Quiz: {
+                        select: {
+                            id: true,
+                            title: true,
                         }
                     }
                 }

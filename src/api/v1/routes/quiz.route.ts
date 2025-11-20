@@ -3,6 +3,7 @@ import { QuizController } from '../controllers/quiz.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { verifyRole } from '../middlewares/verifyrole.middleware';
 import { validateBody } from '../middlewares/schema.middleware';
+import { verifyEnrollmentBySection } from '../middlewares/enrollment.middleware';
 import {
     createQuizSchema,
     updateQuizSchema,
@@ -72,6 +73,7 @@ router.delete(
 router.post(
     '/start',
     authMiddleware,
+    verifyEnrollmentBySection,
     validateBody(startQuizAttemptSchema),
     QuizController.startQuizAttempt
 );
@@ -80,6 +82,7 @@ router.post(
 router.post(
     '/save-answer',
     authMiddleware,
+    verifyEnrollmentBySection,
     validateBody(saveAnswerSchema),
     QuizController.saveAnswer
 );
@@ -88,6 +91,7 @@ router.post(
 router.post(
     '/submit',
     authMiddleware,
+    verifyEnrollmentBySection,
     validateBody(submitQuizSchema),
     QuizController.submitQuiz
 );
@@ -96,6 +100,7 @@ router.post(
 router.get(
     '/attempts/:attemptId/result',
     authMiddleware,
+    verifyEnrollmentBySection,
     QuizController.getAttemptResult
 );
 
@@ -103,6 +108,7 @@ router.get(
 router.get(
     '/my-attempts/:quizId',
     authMiddleware,
+    verifyEnrollmentBySection,
     QuizController.getMyAttempts
 );
 
