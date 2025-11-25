@@ -173,3 +173,97 @@ export const verifyEnrollmentBySection = async (
         });
     }
 };
+
+/**
+ * Middleware to verify that user is enrolled in a class via materialId
+ * Usage: For routes that use materialId instead of sectionId
+ * 
+ * Expects materialId to be in req.params.materialId
+ */
+export const verifyEnrollmentByMaterial = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+) => {
+    try {
+        const userId = req.user?.id;
+
+        if (!userId) {
+            return sendResponse({
+                res,
+                statusCode: 401,
+                success: false,
+                message: 'Unauthorized',
+                data: null,
+            });
+        }
+
+        const materialIdStr = req.params.materialId;
+
+        if (!materialIdStr) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: 'Material ID is required',
+                data: null,
+            });
+        }
+
+        const materialId = parseInt(materialIdStr);
+
+        if (isNaN(materialId)) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: 'Invalid material ID',
+                data: null,
+            });
+        }
+
+        // Get material to find sectionId, then classId
+        const material = await prisma.material.findUnique({
+            where: { id: materialId },
+            select: {
+                Section: {
+                    select: { classId: true }
+                }
+            },
+        });
+
+        if (!material) {
+            return sendResponse({
+                res,
+                statusCode: 404,
+                success: false,
+                message: 'Material not found',
+                data: null,
+            });
+        }
+
+        // Check if user is enrolled in the class
+        const isEnrolled = await EnrollmentRepository.isUserEnrolled(userId, material.Section.classId);
+
+        if (!isEnrolled) {
+            return sendResponse({
+                res,
+                statusCode: 403,
+                success: false,
+                message: 'You are not enrolled in this class',
+                data: null,
+            });
+        }
+
+        // User is enrolled, proceed to next middleware
+        next();
+    } catch (error) {
+        return sendResponse({
+            res,
+            statusCode: 500,
+            success: false,
+            message: (error as Error).message,
+            data: null,
+        });
+    }
+};

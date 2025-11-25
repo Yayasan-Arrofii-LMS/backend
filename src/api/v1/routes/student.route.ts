@@ -1,7 +1,7 @@
 import { Router } from "express";
 import studentController from "../controllers/student.controller";
 import { authMiddleware } from "../middlewares/auth.middleware";
-import { verifyEnrollmentBySection } from "../middlewares/enrollment.middleware";
+import { verifyEnrollmentBySection, verifyEnrollmentByMaterial } from "../middlewares/enrollment.middleware";
 import materialFileController from "../controllers/materialFile.controller";
 
 const studentRouter = Router();
@@ -20,7 +20,7 @@ studentRouter.get(
 studentRouter.get(
     "/classes/sections/materials/:materialId/files",
     authMiddleware,
-    verifyEnrollmentBySection,
+    verifyEnrollmentByMaterial,
     materialFileController.getAllMaterialFiles
 );
 
