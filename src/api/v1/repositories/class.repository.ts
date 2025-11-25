@@ -111,7 +111,8 @@ class ClassRepository {
                 where: {
                     User_Class: {
                         some: {
-                            userId: userId
+                            userId: userId,
+                            role: class_role.Teacher,
                         }
                     },
                     AND: search ? {

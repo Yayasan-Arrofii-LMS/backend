@@ -5,6 +5,7 @@ import { sendResponse } from "../helpers/baseResponse";
 import prisma from "../../../database";
 import { imageType, optimizeImage } from "../helpers/imageCompress";
 import { saveFile } from "../helpers/file";
+import { EnrollmentRepository } from "../repositories/enrollment.repository";
 
 interface ClassDto {
     id: number;
@@ -15,13 +16,7 @@ interface ClassDto {
     updatedAt: string;
 }
 
-export async function getTestTeacher() {
-    return await prisma.user.findFirst({
-        where: {
-            name: "teachertestacc"
-        }
-    })
-}
+
 
 
 export const getClasses = async (req: Request, res: Response) => {
@@ -62,8 +57,8 @@ export const getClasses = async (req: Request, res: Response) => {
 export const getClassById = async (req: Request, res: Response) => {
     try {
         const classId = parseInt(req.params.id);
-        const classData = await classService.getClassById(classId);
         const userId = req.user!.id!;
+        const classData = await classService.getClassById(classId);
 
         if (!classData) {
             return res.status(404).json({
@@ -71,6 +66,16 @@ export const getClassById = async (req: Request, res: Response) => {
                 message: "Class not found",
             });
         }
+
+        // Check if user is teacher/admin of this class
+        const isTeacher = await EnrollmentRepository.isUserTeacher(userId, classId);
+        if (!isTeacher) {
+            return res.status(403).json({
+                success: false,
+                message: "Access denied. Only teachers of this class can view details.",
+            });
+        }
+
         const studentsInClass = await classService.getAllStudentsInClass(classId);
 
 
@@ -147,7 +152,26 @@ export const createClass = async (req: Request, res: Response) => {
 export const updateClass = async (req: Request, res: Response) => {
     try {
         const classId = parseInt(req.params.id);
+        const userId = req.user!.id!;
         const { name, description } = req.body;
+
+        // Check if class exists
+        const classData = await classService.getClassById(classId);
+        if (!classData) {
+            return res.status(404).json({
+                success: false,
+                message: "Class not found",
+            });
+        }
+
+        // Check if user is teacher/admin of this class
+        const isTeacher = await EnrollmentRepository.isUserTeacher(userId, classId);
+        if (!isTeacher) {
+            return res.status(403).json({
+                success: false,
+                message: "Access denied. Only teachers of this class can update it.",
+            });
+        }
 
         const file = req.file;
 
@@ -193,9 +217,26 @@ export const updateClass = async (req: Request, res: Response) => {
 
 export const deleteClass = async (req: Request, res: Response) => {
     try {
-        console.log("Received request to delete class with ID:");
-
         const classId = parseInt(req.params.id);
+        const userId = req.user!.id!;
+
+        // Check if class exists
+        const classData = await classService.getClassById(classId);
+        if (!classData) {
+            return res.status(404).json({
+                success: false,
+                message: "Class not found",
+            });
+        }
+
+        // Check if user is teacher/admin of this class
+        const isTeacher = await EnrollmentRepository.isUserTeacher(userId, classId);
+        if (!isTeacher) {
+            return res.status(403).json({
+                success: false,
+                message: "Access denied. Only teachers of this class can delete it.",
+            });
+        }
 
         const deleted = await classService.deleteClass(classId);
 

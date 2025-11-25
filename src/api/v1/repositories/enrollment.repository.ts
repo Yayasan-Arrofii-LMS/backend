@@ -117,4 +117,17 @@ export class EnrollmentRepository {
             },
         });
     }
+
+    // Check if user is a teacher in a class
+    static async isUserTeacher(userId: string, classId: number) {
+        const enrollment = await prisma.user_Class.findUnique({
+            where: {
+                userId_classId: {
+                    userId,
+                    classId,
+                },
+            },
+        });
+        return enrollment?.role === class_role.Teacher || enrollment?.role === class_role.Admin;
+    }
 }
