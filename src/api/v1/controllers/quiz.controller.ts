@@ -12,6 +12,7 @@ export class QuizController {
             }
 
             const quizzes = await QuizService.getQuizzesBySection(sectionId);
+
             return sendResponse({
                 res,
                 statusCode: 200,
@@ -33,10 +34,6 @@ export class QuizController {
     static async createQuiz(req: Request, res: Response) {
         try {
             const sectionId = parseInt(req.params.sectionId);
-
-            console.log('Params:', req.params);
-            console.log('Parsed sectionId:', sectionId);
-            console.log('Body:', req.body);
 
             if (isNaN(sectionId) || !sectionId) {
                 return sendResponse({
@@ -150,6 +147,12 @@ export class QuizController {
             if (isNaN(quizId)) {
                 throw new Error('Invalid quiz ID');
             }
+
+            const quiz = await QuizService.getQuizById(quizId);
+            if (!quiz) {
+                throw new Error('Quiz not found');
+            }
+
             const question = await QuizService.createQuestion(quizId, req.body);
             return sendResponse({
                 res,
@@ -219,10 +222,68 @@ export class QuizController {
         }
     }
 
+    static async getAllQuestions(req: Request, res: Response) {
+        try {
+            const quizId = parseInt(req.params.quizId);
+            if (isNaN(quizId)) {
+                throw new Error('Invalid quiz ID');
+            }
+            // Check if user is student (hide answers and explanation)
+            const isStudent = req.role === 'Student';
+            const questions = await QuizService.getAllQuestions(quizId, isStudent);
+            return sendResponse({
+                res,
+                statusCode: 200,
+                success: true,
+                message: 'Questions retrieved',
+                data: questions,
+            });
+        } catch (error) {
+            return sendResponse({
+                res,
+                statusCode: 500,
+                success: false,
+                message: (error as Error).message,
+                data: null,
+            });
+        }
+    }
+
+    static async getQuestionById(req: Request, res: Response) {
+        try {
+            const questionId = parseInt(req.params.questionId);
+            if (isNaN(questionId)) {
+                throw new Error('Invalid question ID');
+            }
+            // Check if user is student (hide answers and explanation)
+            const isStudent = req.role === 'Student';
+            const question = await QuizService.getQuestionById(questionId, isStudent);
+            return sendResponse({
+                res,
+                statusCode: 200,
+                success: true,
+                message: 'Question retrieved',
+                data: question,
+            });
+        } catch (error) {
+            return sendResponse({
+                res,
+                statusCode: 500,
+                success: false,
+                message: (error as Error).message,
+                data: null,
+            });
+        }
+    }
+
     // === STUDENT ===
     static async startQuizAttempt(req: Request, res: Response) {
         try {
-            const attempt = await QuizService.startQuizAttempt(req.user!.id!, req.body);
+            const quizId = parseInt(req.params.quizId);
+            if (isNaN(quizId)) {
+                throw new Error('Invalid quiz ID');
+            }
+            const attempt = await QuizService.startQuizAttempt(req.user!.id!, { quizId });
             return sendResponse({
                 res,
                 statusCode: 201,
@@ -338,4 +399,81 @@ export class QuizController {
             });
         }
     }
-} 3
+
+    static async getAttemptQuestions(req: Request, res: Response) {
+        try {
+            const attemptId = parseInt(req.params.attemptId);
+            if (isNaN(attemptId)) {
+                throw new Error('Invalid attempt ID');
+            }
+            const questions = await QuizService.getAttemptQuestions(req.user!.id!, attemptId);
+            return sendResponse({
+                res,
+                statusCode: 200,
+                success: true,
+                message: 'Attempt questions retrieved',
+                data: questions,
+            });
+        } catch (error) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: (error as Error).message,
+                data: null,
+            });
+        }
+    }
+
+    static async getQuizReview(req: Request, res: Response) {
+        try {
+            const attemptId = parseInt(req.params.attemptId);
+            if (isNaN(attemptId)) {
+                throw new Error('Invalid attempt ID');
+            }
+            const review = await QuizService.getQuizReview(req.user!.id!, attemptId);
+            return sendResponse({
+                res,
+                statusCode: 200,
+                success: true,
+                message: 'Quiz review retrieved',
+                data: review,
+            });
+        } catch (error) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: (error as Error).message,
+                data: null,
+            });
+        }
+    }
+
+    static async getQuizByIdForStudent(req: Request, res: Response) {
+        try {
+            const quizId = parseInt(req.params.quizId);
+            if (isNaN(quizId)) {
+                throw new Error('Invalid quiz ID');
+            }
+
+            const quiz = await QuizService.getQuizByIdForStudent(quizId, req.user!.id!);
+
+            return sendResponse({
+                res,
+                statusCode: 200,
+                success: true,
+                message: 'Quiz detail retrieved',
+                data: quiz,
+            });
+        } catch (error) {
+            return sendResponse({
+                res,
+                statusCode: 404,
+                success: false,
+                message: (error as Error).message,
+                data: null,
+            });
+        }
+    }
+}

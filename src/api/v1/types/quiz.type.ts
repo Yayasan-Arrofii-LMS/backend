@@ -16,6 +16,7 @@ export type CreateQuestionInput = {
     question: string;
     type: "MultipleChoice" | "TrueFalse" | "Essay";
     points: number;
+    explanation?: string;
     answers?: { answer: string; is_correct: boolean }[];
 };
 

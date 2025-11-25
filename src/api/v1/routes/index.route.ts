@@ -14,6 +14,7 @@ import enrollmentRouter from "./enrollment.route";
 import upload from "../../../config/multer.config";
 import publicRouter from "./public.route";
 import profileRouter from "./profile.route";
+import studentRouter from "./student.route";
 
 
 const router = Router();
@@ -29,14 +30,15 @@ declare module "express-serve-static-core" {
 
 router.use("/teachers", authMiddleware, verifyRole(["Admin", "Teacher"]), teacherRouter);
 router.use("/dashboard", authMiddleware, verifyRole(["Admin"]), dashboardRouter);
-router.use("/classes", authMiddleware, verifyRole(["Admin", "Teacher"]), classRouter);
-router.use("/classes/:classId/sections", sectionRouter);
-router.use("/classes/sections/:sectionId/materials", materialRouter);
 router.use("/classes/sections/:sectionId/quizzes", quizRouter);
+router.use("/classes/sections/:sectionId/materials", materialRouter);
+router.use("/classes", authMiddleware, verifyRole(["Admin", "Teacher"]), classRouter);
 router.use("/classes/sections/materials/:materialId/files", materialFileRouter);
 router.use("/enrollment", enrollmentRouter);
+router.use("/classes/:classId/sections", sectionRouter);
+
 router.use("/", authRouter)
-router.use("/students", authMiddleware, verifyRole(["Student", "Admin"]),);
+router.use("/students", authMiddleware, verifyRole(["Student", "Admin"]), studentRouter);
 router.use("/public", publicRouter)
 router.use("/profile", profileRouter);
 

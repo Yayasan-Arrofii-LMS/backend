@@ -6,8 +6,8 @@ export const createQuizSchema = z.object({
     description: z.string().min(1, "Description is required"),
     max_attempts: z.number().int().min(1, "Max attempts must be >= 1"),
     time_limit: z.number().int().min(1, "Time limit must be >= 1 minute"),
-    open_at: z.string().datetime("Invalid open_at format"),
-    close_at: z.string().datetime("Invalid close_at format"),
+    open_at: z.string().datetime().or(z.date()),
+    close_at: z.string().datetime().or(z.date()),
     passing_grade: z.number().int().min(0).max(100),
     xp: z.number().int().min(0).default(0),
 });
@@ -24,6 +24,7 @@ export const createQuestionSchema = z.object({
     question: z.string().min(1, "Question is required"),
     type: z.enum(["MultipleChoice", "TrueFalse", "Essay"]),
     points: z.number().int().min(1, "Points must be >= 1"),
+    explanation: z.string().optional(),
     answers: z
         .array(answerSchema)
         .min(1)

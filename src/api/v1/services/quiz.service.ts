@@ -17,6 +17,19 @@ export class QuizService {
         return QuizRepository.getQuizzesBySection(sectionId);
     }
 
+    static async getQuizzesBySectionForStudent(sectionId: number, userId: string) {
+        // Validate that section exists
+        const section = await prisma.section.findUnique({
+            where: { id: sectionId },
+        });
+
+        if (!section) {
+            throw new Error(`Section with ID ${sectionId} not found`);
+        }
+
+        return QuizRepository.getQuizzesBySectionForStudent(sectionId, userId);
+    }
+
     static async createQuiz(data: CreateQuizInput) {
         // Validate that section exists
         const section = await prisma.section.findUnique({
@@ -32,6 +45,12 @@ export class QuizService {
 
     static async getQuizById(id: number) {
         const quiz = await QuizRepository.getQuizById(id);
+        if (!quiz) throw new Error('Quiz not found');
+        return quiz;
+    }
+
+    static async getQuizByIdForStudent(quizId: number, userId: string) {
+        const quiz = await QuizRepository.getQuizByIdForStudent(quizId, userId);
         if (!quiz) throw new Error('Quiz not found');
         return quiz;
     }
@@ -58,18 +77,20 @@ export class QuizService {
         return QuizRepository.deleteQuestion(questionId);
     }
 
-    // === Student ===
+    static async getAllQuestions(quizId: number, isStudent: boolean = false) {
+        await this.getQuizById(quizId);
+        return QuizRepository.getAllQuestions(quizId, isStudent);
+    }
+
+    static async getQuestionById(questionId: number, isStudent: boolean = false) {
+        const question = await QuizRepository.getQuestionById(questionId, isStudent);
+        if (!question) throw new Error('Question not found');
+        return question;
+    }
+
+    // === Student ===0
     static async startQuizAttempt(userId: string, data: StartQuizAttemptInput) {
         const quiz = await this.getQuizById(data.quizId);
-        const now = new Date();
-
-        // Check if quiz is open
-        if (now < quiz.open_at) {
-            throw new Error('Quiz belum dibuka');
-        }
-        if (now > quiz.close_at) {
-            throw new Error('Quiz sudah ditutup');
-        }
 
         // Check max attempts
         const attempts = await QuizRepository.getStudentAttempts(userId, data.quizId);
@@ -83,6 +104,7 @@ export class QuizService {
         const ongoingAttempt = attempts.find((a) => a.submitted_at === null);
         if (ongoingAttempt) {
             // Check if time limit exceeded
+            const now = new Date();
             const timeElapsed = now.getTime() - ongoingAttempt.started_at.getTime();
             const timeLimitMs = quiz.time_limit * 60 * 1000;
 
@@ -122,11 +144,6 @@ export class QuizService {
 
         if (timeElapsed > timeLimitMs) {
             throw new Error('Waktu quiz telah habis');
-        }
-
-        // Check if quiz is still open
-        if (now > attempt.quiz.close_at) {
-            throw new Error('Quiz sudah ditutup');
         }
 
         // Save answer
@@ -176,5 +193,28 @@ export class QuizService {
 
     static async getMyAttempts(userId: string, quizId: number) {
         return QuizRepository.getStudentAttempts(userId, quizId);
+    }
+
+    static async getAttemptQuestions(userId: string, attemptId: number) {
+        const attempt = await QuizRepository.getAttemptById(attemptId);
+        if (!attempt) {
+            throw new Error('Attempt tidak ditemukan');
+        }
+
+        // Verify user owns this attempt
+        if (attempt.userId !== userId) {
+            throw new Error('Anda tidak memiliki akses ke attempt ini');
+        }
+
+        // Don't allow if already submitted
+        if (attempt.submitted_at) {
+            throw new Error('Quiz sudah disubmit, tidak bisa diubah lagi');
+        }
+
+        return QuizRepository.getAttemptQuestions(attemptId);
+    }
+
+    static async getQuizReview(userId: string, attemptId: number) {
+        return QuizRepository.getQuizReview(attemptId, userId);
     }
 }
