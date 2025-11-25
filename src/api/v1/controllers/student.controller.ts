@@ -2,7 +2,6 @@ import { Request, Response } from "express";
 import { sendResponse } from "../helpers/baseResponse";
 import materialService from "../services/material.service";
 import studentService from "../services/student.service";
-import { NotFoundError } from "../errors/notfound.error";
 import classService from "../services/class.service";
 import sectionService from "../services/section.service";
 

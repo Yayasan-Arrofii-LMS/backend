@@ -38,8 +38,8 @@ router.use("/enrollment", enrollmentRouter);
 router.use("/classes/:classId/sections", sectionRouter);
 
 router.use("/", authRouter)
-router.use("/students", authMiddleware, verifyRole(["Student", "Admin"]), studentRouter);
-router.use("/public", publicRouter)
+router.use("/students", authMiddleware, verifyRole(["Student", "Teacher", "Admin"]), studentRouter);
+router.use("/public", publicRouter);
 router.use("/profile", profileRouter);
 
 

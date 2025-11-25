@@ -27,7 +27,7 @@ export async function getTestTeacher() {
 export const getClasses = async (req: Request, res: Response) => {
     try {
         const page = parseInt(req.query.page as string) || 1;
-        const limit = 10;
+        const limit = 12;
         const userId = req.user!.id!;
 
         const { classes, totalItems } = await classService.getClasses(userId, page, limit);
@@ -108,17 +108,16 @@ export const createClass = async (req: Request, res: Response) => {
 
         const file = req.file;
 
+        let uploadPath = "files/public/placeholder.png";
 
-        if (!file) {
-            return res.status(400).json({ error: "No file uploaded" });
+        if (file) {
+            const type = imageType.THUMBNAIL;
+
+            const optimizedBuffer = await optimizeImage(file.buffer, file.mimetype, type);
+            file.buffer = optimizedBuffer;
+
+            uploadPath = await saveFile(file);
         }
-
-        const type = imageType.THUMBNAIL;
-
-        const optimizedBuffer = await optimizeImage(file.buffer, file.mimetype, type);
-        file.buffer = optimizedBuffer;
-
-        const uploadPath = await saveFile(file);
 
         const createdClass = await classService.createClass(userId!, { name, description, image_path: uploadPath });
 

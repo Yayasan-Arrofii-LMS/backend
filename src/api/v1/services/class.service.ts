@@ -68,7 +68,7 @@ class ClassService {
     }
 
     async getAllClasses(data: { search?: string; limit?: number; page?: number }) {
-        const { search, limit = 10, page = 1 } = data;
+        const { search, limit = 12, page = 1 } = data;
         const skip = (page - 1) * limit;
         const classes = await classRepository.getClasses(skip, limit, search);
         const totalItems = await classRepository.getCount(undefined, search);
