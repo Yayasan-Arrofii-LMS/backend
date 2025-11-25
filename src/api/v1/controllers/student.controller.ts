@@ -34,6 +34,39 @@ class StudentController {
 
         sendResponse({ res, statusCode: 200, success: true, data, message: "Class retrieved successfully" });
     }
+
+    async getMaterialsBySection(req: Request, res: Response) {
+        try {
+            const sectionId = parseInt(req.params.sectionId);
+            if (isNaN(sectionId)) {
+                return sendResponse({
+                    res,
+                    statusCode: 400,
+                    success: false,
+                    message: "Invalid section ID",
+                    data: null,
+                });
+            }
+
+            const materials = await materialService.getAllMaterials(sectionId);
+
+            return sendResponse({
+                res,
+                statusCode: 200,
+                success: true,
+                message: "Materials retrieved successfully",
+                data: materials,
+            });
+        } catch (error) {
+            return sendResponse({
+                res,
+                statusCode: 500,
+                success: false,
+                message: (error as Error).message,
+                data: null,
+            });
+        }
+    }
 }
 
 export default new StudentController();
