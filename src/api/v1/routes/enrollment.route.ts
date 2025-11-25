@@ -13,7 +13,7 @@ const router = Router();
 router.post(
     '/enroll',
     authMiddleware,
-    verifyRole(['Student']),
+    verifyRole(['Student', 'Teacher']),
     validateBody(enrollClassSchema),
     EnrollmentController.enrollClass
 );
@@ -22,7 +22,7 @@ router.post(
 router.post(
     '/unenroll',
     authMiddleware,
-    verifyRole(['Student']),
+    verifyRole(['Student', 'Teacher']),
     validateBody(unenrollClassSchema),
     EnrollmentController.unenrollClass
 );
@@ -31,7 +31,7 @@ router.post(
 router.get(
     '/my-classes',
     authMiddleware,
-    verifyRole(['Student']),
+    verifyRole(['Student', 'Teacher']),
     EnrollmentController.getMyEnrolledClasses
 );
 
@@ -39,7 +39,7 @@ router.get(
 router.get(
     '/check/:classId',
     authMiddleware,
-    verifyRole(['Student']),
+    verifyRole(['Student', 'Teacher']),
     EnrollmentController.checkEnrollment
 );
 
