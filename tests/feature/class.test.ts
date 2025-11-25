@@ -82,19 +82,6 @@ describe("Feature Kelas", () => {
             (classRepository.getClasses as jest.Mock).mockResolvedValue(mockClasses);
             (classRepository.getCount as jest.Mock).mockResolvedValue(2);
 
-            jest.spyOn(classController, "getTestTeacher").mockResolvedValue({
-                id: "asdfasd",
-                username: "admin",
-                email: "djamgt23@gmail.com",
-                name: "Admin User",
-                roleId: 1,
-                profileImage: "https://ui-avatars.com/api/?name=Admin+User&background=random",
-                password: hashedPassword,
-                createdAt: randPastDate({ years: 1 }),
-                updatedAt: randPastDate({ years: 1 }),
-                verified_at: null
-            });
-
             const res = await superjest(app).get("/api/v1/classes?page=1&limit=10");
 
             const body: BaseResponse<ClassDto[]> = res.body;
@@ -179,19 +166,6 @@ describe("Feature Kelas", () => {
             };
 
             (classRepository.createClass as jest.Mock).mockResolvedValue(mockClass);
-
-            jest.spyOn(classController, "getTestTeacher").mockResolvedValue({
-                id: "asdfasd",
-                username: "admin",
-                email: "djamgt23@gmail.com",
-                name: "Admin User",
-                roleId: 1,
-                profileImage: "https://ui-avatars.com/api/?name=Admin+User&background=random",
-                password: hashedPassword,
-                createdAt: randPastDate({ years: 1 }),
-                updatedAt: randPastDate({ years: 1 }),
-                verified_at: null
-            });
 
             const res = await superjest(app)
                 .post("/api/v1/classes")
