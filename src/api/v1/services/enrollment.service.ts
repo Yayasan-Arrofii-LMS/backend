@@ -28,10 +28,15 @@ export class EnrollmentService {
             throw new Error('Class not found');
         }
 
-        // Check if user is enrolled
-        const isEnrolled = await EnrollmentRepository.isUserEnrolled(userId, data.classId);
-        if (!isEnrolled) {
+        // Get user's enrollment
+        const enrollment = await EnrollmentRepository.getUserEnrollment(userId, data.classId);
+        if (!enrollment) {
             throw new Error('You are not enrolled in this class');
+        }
+
+        // Check if user is a student
+        if (enrollment.role !== 'Student') {
+            throw new Error('Only students can unenroll from classes');
         }
 
         // Unenroll user
