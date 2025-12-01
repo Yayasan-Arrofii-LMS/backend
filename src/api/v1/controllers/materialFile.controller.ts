@@ -69,7 +69,7 @@ export class MaterialFileController {
             const optimizedBuffer = await optimizeImage(file.buffer, file.mimetype, type);
             file.buffer = optimizedBuffer;
 
-            const uploadPath = await saveFile(file);
+            const uploadPath = await saveFile(file, true);
 
             const materialFile = await materialFileService.createMaterialFile(dto, uploadPath, materialId);
             sendResponse({

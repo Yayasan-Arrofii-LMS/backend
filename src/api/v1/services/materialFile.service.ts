@@ -8,8 +8,9 @@ import { CreateMaterialFileDto, UpdateMaterialFileDto } from "../schemas/materia
 import { deleteFile } from "../helpers/file";
 
 export class MaterialFileService {
-    async getAllMaterialFiles(): Promise<Material_File[]> {
-        return materialFileRepository.findAll();
+    async getAllMaterialFiles(): Promise<Omit<Material_File, 'path'>[]> {
+        const files = await materialFileRepository.findAll();
+        return files.map(({ path, ...rest }) => rest);
     }
 
     async getMaterialFileById(id: number): Promise<Material_File | null> {
