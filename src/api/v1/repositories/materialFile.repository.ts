@@ -6,7 +6,7 @@ type MaterialFileWithUrl = Material_File & { url: string };
 
 export class MaterialFileRepository {
     private transformWithToken(materialFile: Material_File): MaterialFileWithUrl {
-        const appUrl = (process.env.APP_URL || "http://localhost").replace(/\/$/, "") + `:${process.env.PORT || 3001}`;
+        const appUrl = (process.env.APP_URL || "http://localhost").replace(/\/$/, "");
         const token = generateFileToken(materialFile.path, 60);
         return {
             ...materialFile,

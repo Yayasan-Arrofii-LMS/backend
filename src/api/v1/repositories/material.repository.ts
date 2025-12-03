@@ -11,7 +11,7 @@ type MaterialWithSection = Material & {
 
 export class MaterialRepository {
     private transformMaterialFiles(material: Material & { Material_File: Material_File[] }): MaterialWithFiles {
-        const appUrl = (process.env.APP_URL || "http://localhost").replace(/\/$/, "") + `:${process.env.PORT || 3001}`;
+        const appUrl = (process.env.APP_URL || "http://localhost").replace(/\/$/, "");
 
         return {
             ...material,
@@ -23,7 +23,7 @@ export class MaterialRepository {
     }
 
     private transformMaterialFilesWithSection(material: Material & { Section: any; Material_File: Material_File[] }): MaterialWithSection {
-        const appUrl = (process.env.APP_URL || "http://localhost").replace(/\/$/, "") + `:${process.env.PORT || 3001}`;
+        const appUrl = (process.env.APP_URL || "http://localhost").replace(/\/$/, "");
 
         return {
             ...material,

@@ -41,7 +41,7 @@ type SectionDataWithUrl = Omit<SectionData, 'Material'> & {
 
 class SectionService {
     private transformMaterialFiles(sections: SectionData[]): SectionDataWithUrl[] {
-        const appUrl = (process.env.APP_URL || "http://localhost").replace(/\/$/, "") + `:${process.env.PORT || 3001}`;
+        const appUrl = (process.env.APP_URL || "http://localhost").replace(/\/$/, "");
 
         return sections.map(section => ({
             ...section,
