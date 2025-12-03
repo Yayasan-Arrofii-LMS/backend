@@ -15,22 +15,22 @@ class ClassService {
         return await classRepository.getCount();
     }
 
-    async getClasses(userId: string, userRole: string | undefined, page: number, limit: number) {
+    async getClasses(userId: string, userRole: string | undefined, page: number, limit: number, search?: string) {
         const skip = (page - 1) * limit;
 
         // Admin can see all classes
         if (userRole === 'Admin') {
             const [classes, totalItems] = await Promise.all([
-                classRepository.getClasses(skip, limit, undefined, undefined),
-                classRepository.getCount(undefined),
+                classRepository.getClasses(skip, limit, search, undefined),
+                classRepository.getCount(undefined, search),
             ]);
             return { classes, totalItems };
         }
 
         // Regular users see only their enrolled classes
         const [classes, totalItems] = await Promise.all([
-            classRepository.getClasses(skip, limit, undefined, userId),
-            classRepository.getCount(userId),
+            classRepository.getClasses(skip, limit, search, userId),
+            classRepository.getCount(userId, search),
         ]);
         return { classes, totalItems };
     }

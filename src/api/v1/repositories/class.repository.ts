@@ -35,19 +35,21 @@ class ClassRepository {
                     some: {
                         userId: userId
                     }
-                }
-                , AND: search ? [
-                    {
-                        name: {
-                            contains: search,
+                },
+                ...(search ? {
+                    OR: [
+                        {
+                            name: {
+                                contains: search,
+                            }
+                        },
+                        {
+                            description: {
+                                contains: search,
+                            }
                         }
-                    },
-                    {
-                        description: {
-                            contains: search,
-                        }
-                    }
-                ] : [],
+                    ]
+                } : {})
             },
         });
     }
@@ -115,7 +117,7 @@ class ClassRepository {
                             role: class_role.Teacher,
                         }
                     },
-                    AND: search ? {
+                    ...(search ? {
                         OR: [
                             {
                                 name: {
@@ -128,7 +130,7 @@ class ClassRepository {
                                 }
                             },
                         ]
-                    } : {}
+                    } : {})
                 },
                 skip,
                 take,
