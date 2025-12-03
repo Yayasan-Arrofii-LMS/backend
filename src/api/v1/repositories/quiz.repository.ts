@@ -385,12 +385,12 @@ export class QuizRepository {
 
         // Calculate total possible score
         const totalScore = attempt.quiz.quiz_question.reduce((sum, q) => sum + q.points, 0);
-        
+
         // Calculate percentage and check if passed
         const percentage = attempt.score && totalScore > 0
             ? Math.round((attempt.score / totalScore) * 100)
             : 0;
-        
+
         const isPassed = attempt.score && totalScore > 0
             ? (attempt.score / totalScore) * 100 >= attempt.quiz.passing_grade
             : false;
@@ -825,10 +825,10 @@ export class QuizRepository {
             score: attempt.score,
             totalScore: attempt.quiz.quiz_question.reduce((sum, q) => sum + q.points, 0),
             passingGrade: attempt.quiz.passing_grade,
-            percentage: attempt.score 
+            percentage: attempt.score
                 ? Math.round((attempt.score / attempt.quiz.quiz_question.reduce((sum, q) => sum + q.points, 0)) * 100)
                 : 0,
-            isPassed: attempt.score 
+            isPassed: attempt.score
                 ? (attempt.score / attempt.quiz.quiz_question.reduce((sum, q) => sum + q.points, 0)) * 100 >= attempt.quiz.passing_grade
                 : false,
             isGraded: attempt.is_graded,

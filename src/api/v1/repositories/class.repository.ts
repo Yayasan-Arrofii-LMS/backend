@@ -74,7 +74,7 @@ class ClassRepository {
 
         if (!classData) return null;
 
-        const appUrl = (process.env.APP_URL || "http://localhost").replace(/\/$/, "") + `:${process.env.PORT || 3001}`;
+        const appUrl = (process.env.APP_URL || "http://localhost:3001").replace(/\/$/, "");
         const imagePathRelative = `${appUrl}/${classData.image_path}`.replace(/\/$/, "");
 
         return { ...classData, image_path_relative: imagePathRelative };
