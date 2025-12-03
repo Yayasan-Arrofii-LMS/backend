@@ -359,7 +359,7 @@ export class QuizRepository {
     }
 
     static async getAttemptById(attemptId: number) {
-        return prisma.quiz_Attempt.findUnique({
+        const attempt = await prisma.quiz_Attempt.findUnique({
             where: { id: attemptId },
             include: {
                 quiz: {
@@ -380,6 +380,27 @@ export class QuizRepository {
                 },
             },
         });
+
+        if (!attempt) return null;
+
+        // Calculate total possible score
+        const totalScore = attempt.quiz.quiz_question.reduce((sum, q) => sum + q.points, 0);
+        
+        // Calculate percentage and check if passed
+        const percentage = attempt.score && totalScore > 0
+            ? Math.round((attempt.score / totalScore) * 100)
+            : 0;
+        
+        const isPassed = attempt.score && totalScore > 0
+            ? (attempt.score / totalScore) * 100 >= attempt.quiz.passing_grade
+            : false;
+
+        return {
+            ...attempt,
+            totalScore,
+            percentage,
+            isPassed,
+        };
     }
 
     static async getAttemptQuestions(attemptId: number) {
@@ -688,9 +709,14 @@ export class QuizRepository {
     }
 
     static async getStudentAttempts(userId: string, quizId: number) {
-        return prisma.quiz_Attempt.findMany({
+        const attempts = await prisma.quiz_Attempt.findMany({
             where: { userId, quizId },
             include: {
+                quiz: {
+                    include: {
+                        quiz_question: true,
+                    },
+                },
                 attemp_answer: {
                     include: {
                         quiz_question: true,
@@ -699,6 +725,24 @@ export class QuizRepository {
                 },
             },
             orderBy: { createdAt: 'desc' },
+        });
+
+        // Add computed fields for each attempt
+        return attempts.map(attempt => {
+            const totalScore = attempt.quiz.quiz_question.reduce((sum, q) => sum + q.points, 0);
+            const percentage = attempt.score && totalScore > 0
+                ? Math.round((attempt.score / totalScore) * 100)
+                : 0;
+            const isPassed = attempt.score && totalScore > 0
+                ? (attempt.score / totalScore) * 100 >= attempt.quiz.passing_grade
+                : false;
+
+            return {
+                ...attempt,
+                totalScore,
+                percentage,
+                isPassed,
+            };
         });
     }
 
@@ -780,6 +824,13 @@ export class QuizRepository {
             attemptId: attempt.id,
             score: attempt.score,
             totalScore: attempt.quiz.quiz_question.reduce((sum, q) => sum + q.points, 0),
+            passingGrade: attempt.quiz.passing_grade,
+            percentage: attempt.score 
+                ? Math.round((attempt.score / attempt.quiz.quiz_question.reduce((sum, q) => sum + q.points, 0)) * 100)
+                : 0,
+            isPassed: attempt.score 
+                ? (attempt.score / attempt.quiz.quiz_question.reduce((sum, q) => sum + q.points, 0)) * 100 >= attempt.quiz.passing_grade
+                : false,
             isGraded: attempt.is_graded,
             submittedAt: attempt.submitted_at,
             review,

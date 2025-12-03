@@ -24,8 +24,9 @@ export const getClasses = async (req: Request, res: Response) => {
         const page = parseInt(req.query.page as string) || 1;
         const limit = 12;
         const userId = req.user!.id!;
+        const userRole = req.role!;
 
-        const { classes, totalItems } = await classService.getClasses(userId, page, limit);
+        const { classes, totalItems } = await classService.getClasses(userId, userRole, page, limit);
         const meta = {
             totalItems: totalItems,
             currentPage: page,
