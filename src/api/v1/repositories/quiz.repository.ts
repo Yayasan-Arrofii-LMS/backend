@@ -126,6 +126,11 @@ export class QuizRepository {
                         quiz_question: true,
                     },
                 },
+                quiz_question: {
+                    select: {
+                        points: true,
+                    },
+                },
             },
         });
 
@@ -133,8 +138,11 @@ export class QuizRepository {
             return null;
         }
 
+        // Calculate total possible score
+        const totalPossibleScore = quiz.quiz_question.reduce((sum, q) => sum + q.points, 0);
+
         // Get user's attempts for this quiz
-        const attempts = await prisma.quiz_Attempt.findMany({
+        const attemptsRaw = await prisma.quiz_Attempt.findMany({
             where: {
                 quizId,
                 userId,
@@ -148,6 +156,22 @@ export class QuizRepository {
                 submitted_at: true,
             },
             orderBy: { submitted_at: 'desc' },
+        });
+
+        // Add computed fields to attempts
+        const attempts = attemptsRaw.map(attempt => {
+            const percentage = attempt.score && totalPossibleScore > 0
+                ? Math.round((attempt.score / totalPossibleScore) * 100)
+                : 0;
+            const isPassed = attempt.score && totalPossibleScore > 0
+                ? (attempt.score / totalPossibleScore) * 100 >= quiz.passing_grade
+                : false;
+
+            return {
+                ...attempt,
+                percentage,
+                isPassed,
+            };
         });
 
         // Check if there's an ongoing attempt
@@ -168,7 +192,15 @@ export class QuizRepository {
             : null;
 
         return {
-            ...quiz,
+            id: quiz.id,
+            title: quiz.title,
+            description: quiz.description,
+            max_attempts: quiz.max_attempts,
+            time_limit: quiz.time_limit,
+            passing_grade: quiz.passing_grade,
+            xp: quiz.xp,
+            sectionId: quiz.sectionId,
+            createdAt: quiz.createdAt,
             totalQuestions: quiz._count.quiz_question,
             attemptsUsed: attempts.length,
             attemptsRemaining: quiz.max_attempts - attempts.length,
