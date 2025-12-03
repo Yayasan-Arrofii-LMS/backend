@@ -59,6 +59,7 @@ export const getClassById = async (req: Request, res: Response) => {
     try {
         const classId = parseInt(req.params.id);
         const userId = req.user!.id!;
+        const userRole = req.role;
         const classData = await classService.getClassById(classId);
 
         if (!classData) {
@@ -68,13 +69,15 @@ export const getClassById = async (req: Request, res: Response) => {
             });
         }
 
-        // Check if user is teacher/admin of this class
-        const isTeacher = await EnrollmentRepository.isUserTeacher(userId, classId);
-        if (!isTeacher) {
-            return res.status(403).json({
-                success: false,
-                message: "Access denied. Only teachers of this class can view details.",
-            });
+        // Admin can bypass, otherwise check if user is teacher of this class
+        if (userRole !== 'Admin') {
+            const isTeacher = await EnrollmentRepository.isUserTeacher(userId, classId);
+            if (!isTeacher) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Access denied. Only teachers of this class can view details.",
+                });
+            }
         }
 
         const studentsInClass = await classService.getAllStudentsInClass(classId);
@@ -154,6 +157,7 @@ export const updateClass = async (req: Request, res: Response) => {
     try {
         const classId = parseInt(req.params.id);
         const userId = req.user!.id!;
+        const userRole = req.role;
         const { name, description } = req.body;
 
         // Check if class exists
@@ -165,13 +169,15 @@ export const updateClass = async (req: Request, res: Response) => {
             });
         }
 
-        // Check if user is teacher/admin of this class
-        const isTeacher = await EnrollmentRepository.isUserTeacher(userId, classId);
-        if (!isTeacher) {
-            return res.status(403).json({
-                success: false,
-                message: "Access denied. Only teachers of this class can update it.",
-            });
+        // Admin can bypass, otherwise check if user is teacher of this class
+        if (userRole !== 'Admin') {
+            const isTeacher = await EnrollmentRepository.isUserTeacher(userId, classId);
+            if (!isTeacher) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Access denied. Only teachers of this class can update it.",
+                });
+            }
         }
 
         const file = req.file;
@@ -220,6 +226,7 @@ export const deleteClass = async (req: Request, res: Response) => {
     try {
         const classId = parseInt(req.params.id);
         const userId = req.user!.id!;
+        const userRole = req.role;
 
         // Check if class exists
         const classData = await classService.getClassById(classId);
@@ -230,13 +237,15 @@ export const deleteClass = async (req: Request, res: Response) => {
             });
         }
 
-        // Check if user is teacher/admin of this class
-        const isTeacher = await EnrollmentRepository.isUserTeacher(userId, classId);
-        if (!isTeacher) {
-            return res.status(403).json({
-                success: false,
-                message: "Access denied. Only teachers of this class can delete it.",
-            });
+        // Admin can bypass, otherwise check if user is teacher of this class
+        if (userRole !== 'Admin') {
+            const isTeacher = await EnrollmentRepository.isUserTeacher(userId, classId);
+            if (!isTeacher) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Access denied. Only teachers of this class can delete it.",
+                });
+            }
         }
 
         const deleted = await classService.deleteClass(classId);
