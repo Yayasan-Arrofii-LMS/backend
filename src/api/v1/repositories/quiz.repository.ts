@@ -605,7 +605,7 @@ export class QuizRepository {
             }
 
             // Update attempt
-            return tx.quiz_Attempt.update({
+            const updatedAttempt = await tx.quiz_Attempt.update({
                 where: { id: attemptId },
                 data: {
                     submitted_at: new Date(),
@@ -613,7 +613,11 @@ export class QuizRepository {
                     is_graded: !hasEssay,
                 },
                 include: {
-                    quiz: true,
+                    quiz: {
+                        include: {
+                            quiz_question: true,
+                        },
+                    },
                     attemp_answer: {
                         include: {
                             quiz_question: true,
@@ -624,6 +628,22 @@ export class QuizRepository {
                     },
                 },
             });
+
+            // Calculate total possible score and percentage
+            const totalPossibleScore = updatedAttempt.quiz.quiz_question.reduce((sum, q) => sum + q.points, 0);
+            const percentage = updatedAttempt.score && totalPossibleScore > 0
+                ? Math.round((updatedAttempt.score / totalPossibleScore) * 100)
+                : 0;
+            const isPassed = updatedAttempt.score && totalPossibleScore > 0
+                ? (updatedAttempt.score / totalPossibleScore) * 100 >= updatedAttempt.quiz.passing_grade
+                : false;
+
+            return {
+                ...updatedAttempt,
+                totalScore: totalPossibleScore,
+                percentage,
+                isPassed,
+            };
         });
     }
 
