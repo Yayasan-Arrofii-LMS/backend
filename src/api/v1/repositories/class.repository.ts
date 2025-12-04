@@ -97,7 +97,7 @@ class ClassRepository {
 
         const teachers = classData.User_Class.map(uc => uc.user);
 
-        return { 
+        return {
             id: classData.id,
             name: classData.name,
             description: classData.description,
@@ -105,7 +105,7 @@ class ClassRepository {
             image_path_relative: imagePathRelative,
             teachers,
         };
-    }    async getClasses(skip: number = 0, take: number = 10, search?: string, userId?: string) {
+    } async getClasses(skip: number = 0, take: number = 10, search?: string, userId?: string) {
         let classes;
 
         if (!userId) {
