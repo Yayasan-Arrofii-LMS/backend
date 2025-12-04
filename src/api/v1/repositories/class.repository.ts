@@ -71,7 +71,23 @@ class ClassRepository {
     async findClassById(classId: number) {
         const classData = await prisma.class.findFirst({
             where: { id: classId },
-            select: safeClassFields,
+            select: {
+                ...safeClassFields,
+                User_Class: {
+                    where: {
+                        role: class_role.Teacher,
+                    },
+                    select: {
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true,
+                            },
+                        },
+                    },
+                },
+            },
         });
 
         if (!classData) return null;
@@ -79,10 +95,17 @@ class ClassRepository {
         const appUrl = (process.env.APP_URL || "http://localhost:3001").replace(/\/$/, "");
         const imagePathRelative = `${appUrl}/${classData.image_path}`.replace(/\/$/, "");
 
-        return { ...classData, image_path_relative: imagePathRelative };
-    }
+        const teachers = classData.User_Class.map(uc => uc.user);
 
-    async getClasses(skip: number = 0, take: number = 10, search?: string, userId?: string) {
+        return { 
+            id: classData.id,
+            name: classData.name,
+            description: classData.description,
+            image_path: classData.image_path,
+            image_path_relative: imagePathRelative,
+            teachers,
+        };
+    }    async getClasses(skip: number = 0, take: number = 10, search?: string, userId?: string) {
         let classes;
 
         if (!userId) {

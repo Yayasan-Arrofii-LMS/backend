@@ -9,8 +9,8 @@ type SectionMaterial = {
     id: number;
     title: string;
     content: string;
-    Material_File: { 
-        id: number; 
+    Material_File: {
+        id: number;
         path: string;
         title: string;
         createdAt: Date;
