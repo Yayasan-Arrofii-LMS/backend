@@ -9,7 +9,14 @@ type SectionMaterial = {
     id: number;
     title: string;
     content: string;
-    Material_File: { id: number; path: string }[];
+    Material_File: { 
+        id: number; 
+        path: string;
+        title: string;
+        createdAt: Date;
+        updatedAt: Date;
+        materialId: number;
+    }[];
 };
 
 type SectionMaterialWithUrl = {
@@ -49,10 +56,6 @@ class SectionService {
                 ...material,
                 Material_File: material.Material_File.map((file) => ({
                     ...file,
-                    title: '',
-                    createdAt: new Date(),
-                    updatedAt: new Date(),
-                    materialId: 0,
                     url: `${appUrl}/files/protected/${generateFileToken(file.path, 60)}`
                 }))
             }))
@@ -79,6 +82,10 @@ class SectionService {
                                 select: {
                                     id: true,
                                     path: true,
+                                    title: true,
+                                    createdAt: true,
+                                    updatedAt: true,
+                                    materialId: true,
                                 },
                             },
                         },
