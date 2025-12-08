@@ -90,6 +90,7 @@ export const getClassById = async (req: Request, res: Response) => {
             description: classData.description,
             image_path: classData.image_path,
             image_path_relative: classData.image_path_relative,
+            teachers: classData.teachers,
             students: studentsInClass
         }
 
