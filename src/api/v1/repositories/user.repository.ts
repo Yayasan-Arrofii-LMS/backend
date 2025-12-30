@@ -74,6 +74,21 @@ class UserRepository {
         const roleData = await prisma.role.findUnique({ where: { name: role } });
         if (!roleData) throw new Error("Role not found");
 
+        if (roleData.name === "Teacher") {
+            return await prisma.user.create({
+                data: {
+                    name,
+                    email,
+                    password: password,
+                    username,
+                    profileImage: profileImage || "https://ui-avatars.com/api/?name=" + encodeURIComponent(name) + "&background=random",
+                    roleId: roleData.id,
+                    verified_at: new Date(),
+                },
+                select: safeUserFields,
+            });
+        }
+
         return await prisma.user.create({
             data: {
                 name,
