@@ -106,7 +106,6 @@ model Section {
   title       String
   description String?      @db.LongText
   order       Int
-  video_link  String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   classId     Int
@@ -121,6 +120,7 @@ model Material {
   title         String
   content       String          @db.LongText
   xp            Int             @default(10)
+  video_link    String?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   sectionId     Int

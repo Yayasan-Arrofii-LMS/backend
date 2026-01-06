@@ -30,7 +30,6 @@ type SectionData = {
     id: number;
     title: string;
     description: string | null;
-    video_link: string | null;
     order: number;
     Material: SectionMaterial[];
     Quiz: {
@@ -71,7 +70,6 @@ class SectionService {
                     id: true,
                     title: true,
                     description: true,
-                    video_link: true,
                     order: true,
                     Material: {
                         select: {
@@ -117,7 +115,6 @@ class SectionService {
                     id: true,
                     title: true,
                     description: true,
-                    video_link: true,
                     order: true,
                     Material: {
                         select: {
@@ -172,7 +169,6 @@ class SectionService {
                 data: {
                     title: data.title,
                     description: data.description,
-                    video_link: data.video_link,
                     classId,
                     order: newOrder,
                 },

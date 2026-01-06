@@ -9,7 +9,17 @@ export class MaterialFileController {
 
     async getAllMaterialFiles(req: Request, res: Response) {
         try {
-            const materialFiles = await materialFileService.getAllMaterialFiles();
+            const materialId = parseInt(req.params.materialId);
+            if (isNaN(materialId)) {
+                return sendResponse({
+                    res,
+                    statusCode: 400,
+                    success: false,
+                    message: "Invalid material ID",
+                    data: null,
+                });
+            }
+            const materialFiles = await materialFileService.getAllMaterialFiles(materialId);
             sendResponse({
                 res,
                 statusCode: 200,

@@ -19,6 +19,13 @@ export class MaterialFileRepository {
         return files.map(file => this.transformWithToken(file));
     }
 
+    async findAllByMaterialId(materialId: number): Promise<MaterialFileWithUrl[]> {
+        const files = await prisma.material_File.findMany({
+            where: { materialId },
+        });
+        return files.map(file => this.transformWithToken(file));
+    }
+
     async findById(id: number): Promise<MaterialFileWithUrl | null> {
         const file = await prisma.material_File.findUnique({
             where: { id },

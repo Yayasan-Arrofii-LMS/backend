@@ -8,8 +8,15 @@ import { CreateMaterialFileDto, UpdateMaterialFileDto } from "../schemas/materia
 import { deleteFile } from "../helpers/file";
 
 export class MaterialFileService {
-    async getAllMaterialFiles(): Promise<Omit<Material_File, 'path'>[]> {
-        const files = await materialFileRepository.findAll();
+    async getAllMaterialFiles(materialId: number): Promise<Omit<Material_File, 'path'>[]> {
+        const materialExists = await prisma.material.findUnique({
+            where: { id: materialId },
+        });
+        if (!materialExists) {
+            throw new Error(`Material with ID ${materialId} not found`);
+        }
+
+        const files = await materialFileRepository.findAllByMaterialId(materialId);
         return files.map(({ path, ...rest }) => rest);
     }
 
@@ -50,7 +57,10 @@ export class MaterialFileService {
             }
         }
 
-        const materialExists = await materialFileRepository.findById(materialId);
+        const materialExists = await prisma.material.findUnique({
+            where: { id: materialId },
+        });
+
         if (!materialExists) {
             throw new Error(`Material with ID ${materialId} not found`);
         }

@@ -5,7 +5,7 @@ import { generateFileToken } from '../helpers/fileToken';
 type MaterialFileWithUrl = Material_File & { url: string };
 type MaterialWithFiles = Material & { Material_File: MaterialFileWithUrl[] };
 type MaterialWithSection = Material & {
-    Section: { id: number; title: string; description: string | null; order: number; video_link: string | null; classId: number; createdAt: Date; updatedAt: Date };
+    Section: { id: number; title: string; description: string | null; order: number; classId: number; createdAt: Date; updatedAt: Date };
     Material_File: MaterialFileWithUrl[]
 };
 
@@ -62,6 +62,7 @@ export class MaterialRepository {
         xp: number;
         sectionId: number;
         order: number;
+        video_link?: string | null;
     }): Promise<MaterialWithFiles> {
         const material = await prisma.material.create({
             data,
@@ -78,6 +79,7 @@ export class MaterialRepository {
         xp: number;
         sectionId: number;
         order: number;
+        video_link: string | null;
     }>): Promise<MaterialWithFiles> {
         const material = await prisma.material.update({
             where: { id },

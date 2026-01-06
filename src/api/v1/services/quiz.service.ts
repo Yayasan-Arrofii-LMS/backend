@@ -92,6 +92,21 @@ export class QuizService {
     static async startQuizAttempt(userId: string, data: StartQuizAttemptInput) {
         const quiz = await this.getQuizById(data.quizId);
 
+        const now = new Date();
+        if (now < new Date(quiz.open_at)) {
+            throw new Error('Quiz belum dibuka');
+        }
+
+        if (now > new Date(quiz.close_at)) {
+            // Auto-submit any ongoing attempt then block new attempts
+            const lateAttempts = await QuizRepository.getStudentAttempts(userId, data.quizId);
+            const ongoingLate = lateAttempts.find((a) => a.submitted_at === null);
+            if (ongoingLate) {
+                await QuizRepository.submitQuiz(ongoingLate.id);
+            }
+            throw new Error('Quiz sudah ditutup');
+        }
+
         // Check max attempts
         const attempts = await QuizRepository.getStudentAttempts(userId, data.quizId);
         const submittedAttempts = attempts.filter((a) => a.submitted_at !== null);
