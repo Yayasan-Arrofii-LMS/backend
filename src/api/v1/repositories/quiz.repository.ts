@@ -203,6 +203,8 @@ export class QuizRepository {
             xp: quiz.xp,
             sectionId: quiz.sectionId,
             createdAt: quiz.createdAt,
+            open_at: quiz.open_at,
+            close_at: quiz.close_at,
             totalQuestions: quiz._count.quiz_question,
             attemptsUsed: attempts.length,
             attemptsRemaining: quiz.max_attempts - attempts.length,
