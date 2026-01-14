@@ -121,6 +121,8 @@ export class QuizRepository {
                 xp: true,
                 sectionId: true,
                 createdAt: true,
+                open_at: true,
+                close_at: true,
                 _count: {
                     select: {
                         quiz_question: true,
