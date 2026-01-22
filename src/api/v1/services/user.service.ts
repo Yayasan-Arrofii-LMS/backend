@@ -45,7 +45,9 @@ class UserService {
 
     async createUser(pdata: { name: string; email: string; password: string; role: string; username: string; profileImage?: string; }) {
         const { name, email, password, role, username, profileImage } = pdata;
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const defaultPassword = process.env.DEFAULT_PASSWORD || 'Password@123';
+        const finalPassword = role === 'Teacher' ? defaultPassword : password;
+        const hashedPassword = await bcrypt.hash(finalPassword, 10);
         const roleData = await prisma.role.findFirst({ where: { name: role } });
         if (!roleData) throw new Error("Role not found");
         if (await this.findUser({ email })) {
