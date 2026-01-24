@@ -3,6 +3,43 @@ import prisma from '../../../database';
 import { quiz_question_type } from '@prisma/client';
 
 export class QuizRepository {
+    // Centralized scorer to keep calculation in one place
+    private static computeAttemptScore(attempt: any) {
+        let totalScore = 0;
+        let hasUngradedEssay = false;
+
+        for (const answer of attempt.attemp_answer) {
+            const question = attempt.quiz.quiz_question.find((q: any) => q.id === answer.questionId);
+            if (!question) continue;
+
+            if (question.type === 'Essay') {
+                hasUngradedEssay = true;
+                continue;
+            }
+
+            if (question.type === 'MultipleChoice') {
+                const correctIds = question.quiz_answer
+                    .filter((a: any) => a.is_correct)
+                    .map((a: any) => a.id)
+                    .sort();
+                const selectedIds = answer.attemp_multiple_answer
+                    .map((a: any) => a.answerId)
+                    .sort();
+                const isCorrect =
+                    correctIds.length === selectedIds.length &&
+                    correctIds.every((id: number, idx: number) => id === selectedIds[idx]);
+                if (isCorrect) totalScore += question.points;
+            } else if (question.type === 'TrueFalse') {
+                const correctAnswer = question.quiz_answer.find((a: any) => a.is_correct);
+                if (correctAnswer && answer.answer === correctAnswer.answer) {
+                    totalScore += question.points;
+                }
+            }
+        }
+
+        return { totalScore, hasUngradedEssay };
+    }
+
     static async getQuizzesBySection(sectionId: number) {
         console.log('Fetching quizzes for sectionId:', sectionId);
         return prisma.quiz.findMany({
@@ -605,48 +642,15 @@ export class QuizRepository {
 
             if (!attempt) throw new Error('Attempt not found');
 
-            // Calculate score
-            let totalScore = 0;
-            let hasEssay = false;
-
-            for (const answer of attempt.attemp_answer) {
-                const question = attempt.quiz.quiz_question.find(
-                    (q) => q.id === answer.questionId
-                );
-                if (!question) continue;
-
-                if (question.type === 'Essay') {
-                    hasEssay = true;
-                    continue;
-                }
-
-                if (question.type === 'MultipleChoice') {
-                    const correctIds = question.quiz_answer
-                        .filter((a) => a.is_correct)
-                        .map((a) => a.id)
-                        .sort();
-                    const selectedIds = answer.attemp_multiple_answer
-                        .map((a) => a.answerId)
-                        .sort();
-                    const isCorrect =
-                        correctIds.length === selectedIds.length &&
-                        correctIds.every((id, idx) => id === selectedIds[idx]);
-                    if (isCorrect) totalScore += question.points;
-                } else if (question.type === 'TrueFalse') {
-                    const correctAnswer = question.quiz_answer.find((a) => a.is_correct);
-                    if (correctAnswer && answer.answer === correctAnswer.answer) {
-                        totalScore += question.points;
-                    }
-                }
-            }
+            const { totalScore, hasUngradedEssay } = this.computeAttemptScore(attempt);
 
             // Update attempt
             const updatedAttempt = await tx.quiz_Attempt.update({
                 where: { id: attemptId },
                 data: {
                     submitted_at: new Date(),
-                    score: hasEssay ? null : totalScore,
-                    is_graded: !hasEssay,
+                    score: hasUngradedEssay ? null : totalScore,
+                    is_graded: !hasUngradedEssay,
                 },
                 include: {
                     quiz: {
@@ -708,45 +712,19 @@ export class QuizRepository {
 
             if (!attempt) throw new Error('Attempt not found');
 
-            // Calculate score
-            let totalScore = 0;
-            let hasUngradedEssay = false;
-
-            for (const answer of attempt.attemp_answer) {
-                const question = attempt.quiz.quiz_question.find(
-                    (q) => q.id === answer.questionId
-                );
-                if (!question) continue;
-
-                if (question.type === 'Essay') {
-                    // Check if essay has been graded manually
-                    // If not graded, skip
-                    hasUngradedEssay = true;
-                    continue;
-                }
-
-                if (question.type === 'MultipleChoice') {
-                    const correctIds = question.quiz_answer
-                        .filter((a) => a.is_correct)
-                        .map((a) => a.id)
-                        .sort();
-                    const selectedIds = answer.attemp_multiple_answer
-                        .map((a) => a.answerId)
-                        .sort();
-                    const isCorrect =
-                        correctIds.length === selectedIds.length &&
-                        correctIds.every((id, idx) => id === selectedIds[idx]);
-                    if (isCorrect) totalScore += question.points;
-                } else if (question.type === 'TrueFalse') {
-                    const correctAnswer = question.quiz_answer.find((a) => a.is_correct);
-                    if (correctAnswer && answer.answer === correctAnswer.answer) {
-                        totalScore += question.points;
-                    }
-                }
+            // Skip recalculation if already graded
+            if (attempt.is_graded) {
+                return {
+                    attemptId,
+                    score: attempt.score ?? 0,
+                    isGraded: true,
+                };
             }
 
+            const { totalScore, hasUngradedEssay } = this.computeAttemptScore(attempt);
+
             // Update score if all graded
-            if (!hasUngradedEssay || attempt.is_graded) {
+            if (!hasUngradedEssay) {
                 await tx.quiz_Attempt.update({
                     where: { id: attemptId },
                     data: {
@@ -759,7 +737,7 @@ export class QuizRepository {
             return {
                 attemptId,
                 score: totalScore,
-                isGraded: !hasUngradedEssay || attempt.is_graded,
+                isGraded: !hasUngradedEssay,
             };
         });
     }
@@ -784,8 +762,27 @@ export class QuizRepository {
         });
 
         // Add computed fields for each attempt
-        return attempts.map(attempt => {
+        return Promise.all(attempts.map(async (attempt) => {
             const totalScore = attempt.quiz.quiz_question.reduce((sum, q) => sum + q.points, 0);
+
+            // If not graded yet, try to calculate (only auto-gradeable parts)
+            if (!attempt.is_graded) {
+                const { totalScore: computedScore, hasUngradedEssay } = this.computeAttemptScore(attempt);
+
+                if (!hasUngradedEssay) {
+                    await prisma.quiz_Attempt.update({
+                        where: { id: attempt.id },
+                        data: {
+                            score: computedScore,
+                            is_graded: true,
+                        },
+                    });
+
+                    attempt.score = computedScore;
+                    attempt.is_graded = true;
+                }
+            }
+
             const percentage = attempt.score && totalScore > 0
                 ? Math.round((attempt.score / totalScore) * 100)
                 : 0;
@@ -799,7 +796,7 @@ export class QuizRepository {
                 percentage,
                 isPassed,
             };
-        });
+        }));
     }
 
     static async getQuizReview(attemptId: number, userId: string) {

@@ -17,7 +17,7 @@ export class AuthService {
             throw new Error('Account not verified');
         }
 
-        const isSameCredentials = user.username === password;
+        const isSameCredentials = (process.env.DEFAULT_PASSWORD || 'Password@123') === password;
         return { user, isSameCredentials };
     }
 
