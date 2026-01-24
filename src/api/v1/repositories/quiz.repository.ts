@@ -560,40 +560,30 @@ export class QuizRepository {
         selectedAnswerIds?: number[];
     }) {
         return prisma.$transaction(async (tx) => {
-            // Check if answer already exists
-            const existing = await tx.attemp_Answer.findFirst({
+            // Use upsert to avoid race conditions on (attemptId, questionId)
+            const attempAnswer = await tx.attemp_Answer.upsert({
                 where: {
+                    attemptId_questionId: {
+                        attemptId: data.attemptId,
+                        questionId: data.questionId,
+                    },
+                },
+                update: {
+                    answer: data.answer,
+                    path: data.filePath,
+                },
+                create: {
                     attemptId: data.attemptId,
                     questionId: data.questionId,
+                    answer: data.answer,
+                    path: data.filePath,
                 },
             });
 
-            let attempAnswer;
-            if (existing) {
-                // Update existing answer
-                attempAnswer = await tx.attemp_Answer.update({
-                    where: { id: existing.id },
-                    data: {
-                        answer: data.answer,
-                        path: data.filePath,
-                    },
-                });
-
-                // Delete old multiple choice answers
-                await tx.attemp_Multiple_Answer.deleteMany({
-                    where: { attempt_answerId: existing.id },
-                });
-            } else {
-                // Create new answer
-                attempAnswer = await tx.attemp_Answer.create({
-                    data: {
-                        attemptId: data.attemptId,
-                        questionId: data.questionId,
-                        answer: data.answer,
-                        path: data.filePath,
-                    },
-                });
-            }
+            // Replace multiple choice selections atomically
+            await tx.attemp_Multiple_Answer.deleteMany({
+                where: { attempt_answerId: attempAnswer.id },
+            });
 
             // Save multiple choice answers
             if (data.selectedAnswerIds && data.selectedAnswerIds.length > 0) {

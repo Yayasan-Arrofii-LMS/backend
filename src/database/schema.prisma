@@ -253,6 +253,8 @@ model Attemp_Answer {
   quiz_attempt           Quiz_Attempt             @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   quiz_question          Quiz_Question            @relation(fields: [questionId], references: [id], onDelete: Cascade)
   attemp_multiple_answer Attemp_Multiple_Answer[]
+
+  @@unique([attemptId, questionId])
 }
 
 model Attemp_Multiple_Answer {
