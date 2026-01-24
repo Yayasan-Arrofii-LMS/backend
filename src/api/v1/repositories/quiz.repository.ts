@@ -600,7 +600,17 @@ export class QuizRepository {
                 include: {
                     quiz_question: true,
                     attemp_multiple_answer: {
-                        include: { quiz_answer: true },
+                        include: {
+                            quiz_answer: {
+                                select: {
+                                    id: true,
+                                    answer: true,
+                                    questionId: true,
+                                    createdAt: true,
+                                    updatedAt: true,
+                                }
+                            }
+                        },
                     },
                 },
             });
