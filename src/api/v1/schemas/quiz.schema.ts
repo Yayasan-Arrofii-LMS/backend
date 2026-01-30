@@ -66,3 +66,17 @@ export const submitQuizSchema = z.object({
 export const getAttemptResultSchema = z.object({
     attemptId: z.number().int(),
 });
+
+export const bulkCreateQuestionsSchema = z.object({
+    title: z.string().min(1, "Title is required"),
+    description: z.string().min(1, "Description is required"),
+    max_attempts: z.number().int().min(1, "Max attempts must be >= 1"),
+    time_limit: z.number().int().min(1, "Time limit must be >= 1 minute"),
+    open_at: z.string().datetime().or(z.date()),
+    close_at: z.string().datetime().or(z.date()),
+    passing_grade: z.number().int().min(0).max(100),
+    xp: z.number().int().min(0).default(0),
+    questions: z.array(createQuestionSchema).min(1, "At least one question is required"),
+});
+
+export type BulkCreateQuestionsInput = z.infer<typeof bulkCreateQuestionsSchema>;

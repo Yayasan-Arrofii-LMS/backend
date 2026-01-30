@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { sendResponse } from '../helpers/baseResponse';
 import { QuizService } from '../services/quiz.service';
+import { BulkCreateQuestionsInput } from '../schemas/quiz.schema';
+
 
 export class QuizController {
     // === TEACHER: Quiz ===
@@ -475,5 +477,30 @@ export class QuizController {
                 data: null,
             });
         }
+    }
+
+    static async bulkCreate(req: Request, res: Response) {
+        const sectionId = parseInt(req.params.sectionId);
+        const bulkCreate: BulkCreateQuestionsInput = req.body;
+
+        try {
+            const result = await QuizService.bulkCreate(sectionId, bulkCreate);
+            return sendResponse({
+                res,
+                statusCode: 201,
+                success: true,
+                message: 'Bulk quiz creation successful',
+                data: null, // Replace null with result when service is implemented
+            });
+        } catch (error) {
+            return sendResponse({
+                res,
+                statusCode: 500,
+                success: false,
+                message: (error as Error).message,
+                data: null,
+            });
+        }
+
     }
 }

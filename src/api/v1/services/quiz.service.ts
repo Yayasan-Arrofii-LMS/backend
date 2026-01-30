@@ -10,6 +10,7 @@ import {
     UpdateQuestionInput,
     UpdateQuizInput,
 } from '../types/quiz.type';
+import { BulkCreateQuestionsInput } from '../schemas/quiz.schema';
 
 export class QuizService {
     // === Quiz ===
@@ -231,5 +232,81 @@ export class QuizService {
 
     static async getQuizReview(userId: string, attemptId: number) {
         return QuizRepository.getQuizReview(attemptId, userId);
+    }
+
+    static async bulkCreate(sectionId: number, bulkCreate: BulkCreateQuestionsInput) {
+        // Validate that section exists
+        const section = await prisma.section.findUnique({
+            where: { id: sectionId },
+        });
+
+        if (!section) {
+            throw new Error(`Section with ID ${sectionId} not found`);
+        }
+
+        const quizData = {
+            title: bulkCreate.title,
+            description: bulkCreate.description,
+            max_attempts: bulkCreate.max_attempts,
+            time_limit: bulkCreate.time_limit,
+            open_at: new Date(bulkCreate.open_at),
+            close_at: new Date(bulkCreate.close_at),
+            passing_grade: bulkCreate.passing_grade,
+            xp: bulkCreate.xp,
+            sectionId: sectionId,
+        }
+
+        const questionsData = bulkCreate.questions;
+
+        // Create quiz and all questions in transaction
+        return await prisma.$transaction(async (tx) => {
+            // Create quiz
+            const quiz = await tx.quiz.create({
+                data: quizData,
+            });
+
+            // Create all questions with their answers
+            const createdQuestions = await Promise.all(
+                questionsData.map(async (questionData) => {
+                    const question = await tx.quiz_Question.create({
+                        data: {
+                            question: questionData.question,
+                            type: questionData.type as any,
+                            points: questionData.points,
+                            explanation: questionData.explanation,
+                            quizId: quiz.id,
+                        },
+                    });
+
+                    // Create answers if not Essay type
+                    if (questionData.type !== 'Essay' && questionData.answers) {
+                        await tx.quiz_Answer.createMany({
+                            data: questionData.answers.map((a) => ({
+                                answer: a.answer,
+                                is_correct: a.is_correct,
+                                questionId: question.id,
+                            })),
+                        });
+                    }
+
+                    // Return question with answers
+                    return tx.quiz_Question.findUnique({
+                        where: { id: question.id },
+                        include: { quiz_answer: true },
+                    });
+                })
+            );
+
+            // Return quiz with all questions
+            return tx.quiz.findUnique({
+                where: { id: quiz.id },
+                include: {
+                    quiz_question: {
+                        include: { quiz_answer: true },
+                        orderBy: { id: 'asc' },
+                    },
+                },
+            });
+        });
     }
 }

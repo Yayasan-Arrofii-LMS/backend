@@ -1,0 +1,88 @@
+{
+    "title": "Matematik Dasar - Chapter 1",
+    "description": "Quiz untuk menguji pemahaman tentang operasi dasar matematika",
+    "max_attempts": 3,
+    "time_limit": 60,
+    "open_at": "2026-01-30T08:00:00Z",
+    "close_at": "2026-02-06T23:59:59Z",
+    "passing_grade": 70,
+    "xp": 100,
+    "questions": [
+        {
+            "question": "Berapakah hasil dari 25 + 17?",
+            "type": "MultipleChoice",
+            "points": 10,
+            "explanation": "Penjumlahan sederhana: 25 + 17 = 42",
+            "answers": [
+                {
+                    "answer": "40",
+                    "is_correct": false
+                },
+                {
+                    "answer": "42",
+                    "is_correct": true
+                },
+                {
+                    "answer": "44",
+                    "is_correct": false
+                },
+                {
+                    "answer": "45",
+                    "is_correct": false
+                }
+            ]
+        },
+        {
+            "question": "Hasil dari 144 dibagi 12 adalah 12",
+            "type": "TrueFalse",
+            "points": 10,
+            "explanation": "Benar, 144 ÷ 12 = 12",
+            "answers": [
+                {
+                    "answer": "True",
+                    "is_correct": true
+                },
+                {
+                    "answer": "False",
+                    "is_correct": false
+                }
+            ]
+        },
+        {
+            "question": "Jelaskan langkah-langkah cara menyelesaikan persamaan linear: 2x + 5 = 13",
+            "type": "Essay",
+            "points": 20,
+            "explanation": "Langkah: 1) Kurangkan 5 dari kedua sisi: 2x = 8, 2) Bagi kedua sisi dengan 2: x = 4"
+        },
+        {
+            "question": "Manakah yang merupakan bilangan prima?",
+            "type": "MultipleChoice",
+            "points": 10,
+            "explanation": "Bilangan prima adalah bilangan yang hanya habis dibagi 1 dan dirinya sendiri",
+            "answers": [
+                {
+                    "answer": "9",
+                    "is_correct": false
+                },
+                {
+                    "answer": "15",
+                    "is_correct": false
+                },
+                {
+                    "answer": "17",
+                    "is_correct": true
+                },
+                {
+                    "answer": "21",
+                    "is_correct": false
+                }
+            ]
+        },
+        {
+            "question": "Persentase adalah bentuk lain dari pecahan dengan penyebut 100",
+            "type": "TrueFalse",
+            "points": 10,
+            "explanation": "Benar, persentase (%) selalu memiliki penyebut 100"
+        }
+    ]
+}

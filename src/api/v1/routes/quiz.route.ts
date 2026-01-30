@@ -10,6 +10,7 @@ import {
     updateQuestionSchema,
     saveAnswerSchema,
     submitQuizSchema,
+    bulkCreateQuestionsSchema,
 } from '../schemas/quiz.schema';
 
 const router = Router({ mergeParams: true });
@@ -158,4 +159,12 @@ router.delete(
     QuizController.deleteQuiz
 );
 
+
+router.post(
+    '/bulk-create',
+    authMiddleware,
+    verifyRole(['Teacher', "Admin"]),
+    validateBody(bulkCreateQuestionsSchema),
+    QuizController.bulkCreate
+);
 export default router;
