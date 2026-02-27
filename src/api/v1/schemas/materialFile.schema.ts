@@ -12,7 +12,7 @@ export const imageSchema = z.any()
     .refine((file) => !!file, "File harus disertakan.")
     .refine((file) =>
         ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"].includes(file.mimetype), {
-        message: "Format file tidak valid. Gunakan gambar (png, jpeg, gif, webp).",
+        message: "Format file tidak valid. Gunakan gambar (png, jpeg, jpg, gif, webp).",
     })
     .refine((file) => file.size <= 10 * 1024 * 1024, {
         message: "Ukuran gambar maksimal 10MB.",

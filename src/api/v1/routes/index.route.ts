@@ -8,6 +8,7 @@ import { verifyRole } from "../middlewares/verifyrole.middleware";
 import { User } from "@prisma/client";
 import materialRouter from "./material.route";
 import materialFileRouter from "./materialFile.route";
+import materialImageRouter from "./materialImage.route";
 import sectionRouter from "./section.route";
 import quizRouter from "./quiz.route";
 import enrollmentRouter from "./enrollment.route";
@@ -34,6 +35,7 @@ router.use("/classes/sections/:sectionId/quizzes", quizRouter);
 router.use("/classes/sections/:sectionId/materials", materialRouter);
 router.use("/classes", authMiddleware, verifyRole(["Admin", "Teacher"]), classRouter);
 router.use("/classes/sections/materials/:materialId/files", materialFileRouter);
+router.use("/material-images", materialImageRouter);
 router.use("/enrollment", enrollmentRouter);
 router.use("/classes/:classId/sections", sectionRouter);
 

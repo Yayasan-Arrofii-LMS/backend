@@ -9,8 +9,6 @@ async function main() {
 
     await rolesSeed();
     await usersSeed();
-    await classesSeed();
-    await user_classesSeed();
 
 
     console.log("✅ Seeding finished.");

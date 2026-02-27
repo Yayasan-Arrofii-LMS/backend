@@ -141,6 +141,16 @@ model Material_File {
   FileToken  FileToken[]
 }
 
+model Material_Image {
+  id         Int      @id @default(autoincrement())
+  title      String
+  path       String
+  is_used    Boolean  @default(false)
+  used_count Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 model User_Material {
   id           Int      @id @default(autoincrement())
   is_completed Boolean
@@ -204,7 +214,7 @@ model Quiz {
 
 model Quiz_Question {
   id            Int                @id @default(autoincrement())
-  question      String
+  question      String             @db.LongText
   type          quiz_question_type
   points        Int
   explanation   String?            @db.LongText

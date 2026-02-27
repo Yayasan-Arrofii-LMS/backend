@@ -10,6 +10,7 @@ app.use(express.urlencoded({ extended: true, limit: "500mb" }));
 
 const allowedOrigins = [
     "http://localhost:3000",
+    'https://toronto-guild-enters-finder.trycloudflare.com'
 ];
 
 app.use(
