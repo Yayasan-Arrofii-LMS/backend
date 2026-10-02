@@ -36,3 +36,7 @@ files/public/*
 
 files/protected/*
 !files/protected/.gitkeep
+
+# Local planning docs - not pushed to repo
+docs/PRD_Sekolah_Alam_Update_Fitur_5.md
+docs/Rencana_Fix_Fondasi_Rekomendasi_Agent (2).md

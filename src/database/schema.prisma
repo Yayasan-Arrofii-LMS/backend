@@ -64,6 +64,8 @@ model User {
   token           Reset_Token[]
   OTP             OTP_Token[]
   FileToken       FileToken[]
+  interests       UserInterest[]
+  activities      MaterialActivity[]
 }
 
 model Xp {
@@ -115,6 +117,26 @@ model Section {
   Quiz        Quiz[]
 }
 
+model Category {
+  id        Int            @id @default(autoincrement())
+  name      String         @unique
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  materials Material[]
+  interests UserInterest[]
+}
+
+model UserInterest {
+  id         Int      @id @default(autoincrement())
+  userId     String
+  categoryId Int
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, categoryId])
+}
+
 model Material {
   id            Int             @id @default(autoincrement())
   title         String
@@ -125,9 +147,26 @@ model Material {
   updatedAt     DateTime        @updatedAt
   sectionId     Int
   order         Int
+  categoryId    Int?
+  category      Category?       @relation(fields: [categoryId], references: [id])
+  difficulty    String?
+  mediaType     String?
   Section       Section         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   Material_File Material_File[]
   User_Material User_Material[]
+  activities    MaterialActivity[]
+}
+
+model MaterialActivity {
+  id         Int      @id @default(autoincrement())
+  userId     String
+  materialId Int
+  action     String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([userId, materialId])
 }
 
 model Material_File {
