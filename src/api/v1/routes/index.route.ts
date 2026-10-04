@@ -16,6 +16,10 @@ import upload from "../../../config/multer.config";
 import publicRouter from "./public.route";
 import profileRouter from "./profile.route";
 import studentRouter from "./student.route";
+import categoryRouter from "./category.route";
+import userInterestRouter from "./userInterest.route";
+import materialActivityRouter from "./materialActivity.route";
+import materialMetadataRouter from "./materialMetadata.route";
 
 
 const router = Router();
@@ -43,6 +47,12 @@ router.use("/", authRouter)
 router.use("/students", authMiddleware, verifyRole(["Student", "Teacher", "Admin"]), studentRouter);
 router.use("/public", publicRouter);
 router.use("/profile", profileRouter);
+
+// New routes — Fondasi Rekomendasi API
+router.use("/categories", categoryRouter);
+router.use("/profile/interests", userInterestRouter);
+router.use("/profile/activities", materialActivityRouter);
+router.use("/materials", materialMetadataRouter);
 
 
 

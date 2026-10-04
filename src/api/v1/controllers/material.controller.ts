@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { sendResponse } from '../helpers/baseResponse';
 import { NotFoundError } from '../errors/notfound.error';
 import materialService from '../services/material.service';
+import materialActivityService from '../services/materialActivity.service';
 
 export class MaterialController {
 
@@ -32,6 +33,12 @@ export class MaterialController {
         try {
             const id = parseInt(req.params.materialId);
             const material = await materialService.getMaterialById(id);
+
+            // Track "opened" activity (non-blocking, with anti-spam)
+            if (req.user?.id) {
+                materialActivityService.trackActivity(req.user.id, id, 'opened').catch(() => {});
+            }
+
             return sendResponse({
                 res,
                 statusCode: 200,
