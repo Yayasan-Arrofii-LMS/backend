@@ -5,6 +5,7 @@ export const createMaterialSchema = z.object({
     content: z.string().min(1, 'Content is required'),
     xp: z.number().int().min(0, 'XP must be a positive number').optional(),
     order: z.number().int().min(1, 'Order must be a positive number').optional(),
+    categoryId: z.number().int().positive('Category ID must be a positive integer').nullable().optional(),
     video_link: z.string().url('Video link must be a valid URL').optional().nullable(),
 });
 
@@ -13,6 +14,7 @@ export const updateMaterialSchema = z.object({
     content: z.string().min(1, 'Content is required').optional(),
     xp: z.number().int().min(0, 'XP must be a positive number').optional(),
     order: z.number().int().min(1, 'Order must be a positive number').optional(),
+    categoryId: z.number().int().positive('Category ID must be a positive integer').nullable().optional(),
     video_link: z.string().url('Video link must be a valid URL').optional().nullable(),
 });
 

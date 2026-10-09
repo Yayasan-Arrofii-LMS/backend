@@ -7,59 +7,32 @@ export const safeClassFields = {
     name: true,
     description: true,
     image_path: true,
+    categoryId: true,
 };
 
 class ClassRepository {
-    async getCount(userId?: string, search?: string) {
+    async getCount(userId?: string, search?: string, categoryId?: number) {
+        const cat = categoryId ? { categoryId } : {};
+        const q = search ? { OR: [{ name: { contains: search } }, { description: { contains: search } }] } : {};
         if (!userId) {
-            return await prisma.class.count({
-                where: search ? {
-                    OR: [
-                        {
-                            name: {
-                                contains: search,
-                            }
-                        },
-                        {
-                            description: {
-                                contains: search,
-                            }
-                        }
-                    ]
-                } : undefined,
-            });
+            return await prisma.class.count({ where: { ...cat, ...q } });
         }
         return await prisma.class.count({
             where: {
-                User_Class: {
-                    some: {
-                        userId: userId
-                    }
-                },
-                ...(search ? {
-                    OR: [
-                        {
-                            name: {
-                                contains: search,
-                            }
-                        },
-                        {
-                            description: {
-                                contains: search,
-                            }
-                        }
-                    ]
-                } : {})
+                ...cat,
+                ...q,
+                User_Class: { some: { userId: userId } },
             },
         });
     }
 
-    async createClass(name: string, description: string, image_path: string) {
+    async createClass(name: string, description: string, image_path: string, categoryId?: number | null) {
         const createdClass = await prisma.class.create({
             data: {
                 name,
                 description,
                 image_path: image_path,
+                categoryId: categoryId ?? null,
             },
             select: safeClassFields
         });
@@ -73,6 +46,7 @@ class ClassRepository {
             where: { id: classId },
             select: {
                 ...safeClassFields,
+                category: { select: { id: true, name: true } },
                 User_Class: {
                     where: {
                         role: class_role.Teacher,
@@ -103,11 +77,28 @@ class ClassRepository {
             description: classData.description,
             image_path: classData.image_path,
             image_path_relative: imagePathRelative,
+            categoryId: classData.categoryId,
+            category: (classData as any).category ?? null,
             teachers,
         };
-    } async getClasses(skip: number = 0, take: number = 10, search?: string, userId?: string) {
+    } async getClasses(skip: number = 0, take: number = 10, search?: string, userId?: string, categoryId?: number) {
         let classes;
 
+        const cat = categoryId ? { categoryId } : {};
+        const q = search ? {
+            OR: [
+                {
+                    name: {
+                        contains: search,
+                    }
+                },
+                {
+                    description: {
+                        contains: search,
+                    }
+                }
+            ]
+        } : {};
         if (!userId) {
             classes = await prisma.class.findMany({
                 skip,
@@ -115,52 +106,27 @@ class ClassRepository {
                 orderBy: {
                     createdAt: "desc",
                 },
-                where: search ? {
-                    OR: [
-                        {
-                            name: {
-                                contains: search,
-                            }
-                        },
-                        {
-                            description: {
-                                contains: search,
-                            }
-                        }
-                    ]
-                } : undefined,
-                select: safeClassFields,
+                where: { ...cat, ...q },
+                select: { ...safeClassFields, category: { select: { id: true, name: true } } },
             });
         } else {
             classes = await prisma.class.findMany({
                 where: {
+                    ...cat,
+                    ...q,
                     User_Class: {
                         some: {
                             userId: userId,
                             role: class_role.Teacher,
                         }
                     },
-                    ...(search ? {
-                        OR: [
-                            {
-                                name: {
-                                    contains: search,
-                                }
-                            },
-                            {
-                                description: {
-                                    contains: search,
-                                }
-                            },
-                        ]
-                    } : {})
                 },
                 skip,
                 take,
                 orderBy: {
                     createdAt: "desc",
                 },
-                select: safeClassFields,
+                select: { ...safeClassFields, category: { select: { id: true, name: true } } },
             });
         }
         return classes.map((classData) => {
@@ -170,7 +136,7 @@ class ClassRepository {
             return { ...classData, image_path_relative: imagePathRelative };
         });
     }
-    async updateClass(classId: number, data: { name: string; description: string, image_path: string }) {
+    async updateClass(classId: number, data: { name?: string; description?: string, image_path?: string, categoryId?: number | null }) {
         return await prisma.class.update({
             where: { id: classId },
             data,

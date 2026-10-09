@@ -10,8 +10,9 @@ class PublicController {
         const search = req.query.search as string | undefined;
         const page = Number(req.query.page ?? 1);
         const limit = Number(req.query.limit ?? 12);
+        const categoryId = req.query.category ? parseInt(req.query.category as string) || undefined : undefined;
 
-        const classes = await classService.getAllClasses({ search: search || "", limit, page });
+        const classes = await classService.getAllClasses({ search: search || "", limit, page, categoryId });
         sendResponse({ res, statusCode: 200, success: true, data: classes, message: "Classes retrieved successfully" });
     }
 

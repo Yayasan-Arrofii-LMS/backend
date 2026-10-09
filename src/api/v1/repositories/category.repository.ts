@@ -7,7 +7,7 @@ export class CategoryRepository {
             orderBy: { name: 'asc' },
             include: {
                 _count: {
-                    select: { materials: true, interests: true },
+                    select: { materials: true, classes: true, interests: true },
                 },
             },
         });
@@ -18,7 +18,7 @@ export class CategoryRepository {
             where: { id },
             include: {
                 _count: {
-                    select: { materials: true, interests: true },
+                    select: { materials: true, classes: true, interests: true },
                 },
             },
         });
@@ -35,7 +35,7 @@ export class CategoryRepository {
             data,
             include: {
                 _count: {
-                    select: { materials: true, interests: true },
+                    select: { materials: true, classes: true, interests: true },
                 },
             },
         });
@@ -47,7 +47,7 @@ export class CategoryRepository {
             data,
             include: {
                 _count: {
-                    select: { materials: true, interests: true },
+                    select: { materials: true, classes: true, interests: true },
                 },
             },
         });

@@ -80,12 +80,14 @@ model Xp {
 }
 
 model Class {
-  id          Int          @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   name        String
-  description String       @db.LongText
+  description String    @db.LongText
   image_path  String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  categoryId  Int?
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   User_Class  User_Class[]
   Section     Section[]
 }
@@ -123,6 +125,7 @@ model Category {
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
   materials Material[]
+  classes   Class[]
   interests UserInterest[]
 }
 

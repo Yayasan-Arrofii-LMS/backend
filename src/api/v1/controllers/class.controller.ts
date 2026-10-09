@@ -24,10 +24,11 @@ export const getClasses = async (req: Request, res: Response) => {
         const page = parseInt(req.query.page as string) || 1;
         const limit = 12;
         const search = (req.query.search as string) || undefined;
+        const categoryId = req.query.category ? parseInt(req.query.category as string) || undefined : undefined;
         const userId = req.user!.id!;
         const userRole = req.role!;
 
-        const { classes, totalItems } = await classService.getClasses(userId, userRole, page, limit, search);
+        const { classes, totalItems } = await classService.getClasses(userId, userRole, page, limit, search, categoryId);
         const meta = {
             totalItems: totalItems,
             currentPage: page,
@@ -41,6 +42,8 @@ export const getClasses = async (req: Request, res: Response) => {
             description: cls.description,
             image_path: cls.image_path,
             image_path_relative: cls.image_path_relative,
+            categoryId: (cls as any).categoryId ?? null,
+            category: (cls as any).category ?? null,
         }))
 
         sendResponse({ res, statusCode: 200, success: true, message: "Get Classes", data: data, meta: meta })
@@ -90,6 +93,8 @@ export const getClassById = async (req: Request, res: Response) => {
             description: classData.description,
             image_path: classData.image_path,
             image_path_relative: classData.image_path_relative,
+            categoryId: (classData as any).categoryId ?? null,
+            category: (classData as any).category ?? null,
             teachers: classData.teachers,
             students: studentsInClass
         }
@@ -107,7 +112,7 @@ export const getClassById = async (req: Request, res: Response) => {
 
 export const createClass = async (req: Request, res: Response) => {
     try {
-        const { name, description } = req.body;
+        const { name, description, categoryId } = req.body;
         if (!name || !description) {
             return res.status(400).json({
                 success: false,
@@ -130,7 +135,7 @@ export const createClass = async (req: Request, res: Response) => {
             uploadPath = await saveFile(file);
         }
 
-        const createdClass = await classService.createClass(userId!, { name, description, image_path: uploadPath });
+        const createdClass = await classService.createClass(userId!, { name, description, image_path: uploadPath, categoryId: categoryId ?? null });
 
         const response: BaseResponse<Partial<ClassDto> & { image_path_relative?: string }> = {
             success: true,
@@ -160,7 +165,7 @@ export const updateClass = async (req: Request, res: Response) => {
         const classId = parseInt(req.params.id);
         const userId = req.user!.id!;
         const userRole = req.role;
-        const { name, description } = req.body;
+        const { name, description, categoryId } = req.body;
 
         // Check if class exists
         const classData = await classService.getClassById(classId);
@@ -194,7 +199,7 @@ export const updateClass = async (req: Request, res: Response) => {
             uploadPath = await saveFile(file);
         }
 
-        const updatedClass = await classService.updateClass(classId, { name, description, image_path: uploadPath });
+        const updatedClass = await classService.updateClass(classId, { name, description, image_path: uploadPath, categoryId });
 
         if (!updatedClass) {
             return res.status(404).json({
