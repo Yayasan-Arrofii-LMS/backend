@@ -4,6 +4,8 @@ import { usersSeed } from "./seeders/users.seed";
 import { classesSeed } from "./seeders/classes.seed";
 import { user_classesSeed } from "./seeders/user_classes.seed";
 import { categoriesSeed } from "./seeders/categories.seed";
+import { sectionsSeeder } from "./seeders/sections.seed";
+import { materialsSeed } from "./seeders/materials.seed";
 import prisma from "../database";
 async function main() {
     console.log("🌱 Seeding database...");
@@ -11,7 +13,10 @@ async function main() {
     await rolesSeed();
     await usersSeed();
     await categoriesSeed();
-
+    await classesSeed();
+    await user_classesSeed();
+    await sectionsSeeder();
+    await materialsSeed();
 
     console.log("✅ Seeding finished.");
 }

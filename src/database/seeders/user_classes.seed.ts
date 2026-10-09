@@ -45,14 +45,22 @@ export const user_classesSeed = async () => {
         }
     }
 
+    const categories = await prisma.category.findMany();
+
     // ✅ Create new classes from matkuls
     const matakuliahs = [];
-    for (const matkul of matkuls) {
+    for (let i = 0; i < matkuls.length; i++) {
+        const matkul = matkuls[i];
+        const assignedCategory = categories.length > 0
+            ? categories[i % categories.length]
+            : null;
+
         const newClass = await prisma.class.create({
             data: {
                 name: matkul,
                 description: randWord({ length: 30 }).join(" "),
                 image_path: "files/public/placeholder.png",
+                categoryId: assignedCategory ? assignedCategory.id : null,
             },
         });
         matakuliahs.push(newClass);
