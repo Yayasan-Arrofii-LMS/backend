@@ -20,6 +20,7 @@ import categoryRouter from "./category.route";
 import userInterestRouter from "./userInterest.route";
 import materialActivityRouter from "./materialActivity.route";
 import materialMetadataRouter from "./materialMetadata.route";
+import recommendationRouter from "./recommendation.route";
 
 
 const router = Router();
@@ -53,6 +54,7 @@ router.use("/categories", categoryRouter);
 router.use("/profile/interests", userInterestRouter);
 router.use("/profile/activities", materialActivityRouter);
 router.use("/materials", materialMetadataRouter);
+router.use("/recommendations", authMiddleware, recommendationRouter);
 
 
 
