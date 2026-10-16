@@ -21,6 +21,7 @@ import userInterestRouter from "./userInterest.route";
 import materialActivityRouter from "./materialActivity.route";
 import materialMetadataRouter from "./materialMetadata.route";
 import recommendationRouter from "./recommendation.route";
+import workshopRouter from "./workshop.route";
 
 
 const router = Router();
@@ -55,6 +56,7 @@ router.use("/profile/interests", userInterestRouter);
 router.use("/profile/activities", materialActivityRouter);
 router.use("/materials", materialMetadataRouter);
 router.use("/recommendations", authMiddleware, recommendationRouter);
+router.use("/workshops", workshopRouter);
 
 
 
