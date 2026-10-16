@@ -15,8 +15,17 @@ export const usersSeed = async () => {
         throw new Error("Roles must be seeded before seeding users.");
     }
 
-    await prisma.user.create({
-        data: {
+    await prisma.user.upsert({
+        where: { email: "umartaufiq8284@ugm.ac.id" },
+        update: {
+            username: "admin",
+            name: "Admin User",
+            roleId: adminRole.id,
+            profileImage: "https://ui-avatars.com/api/?name=Admin+User&background=random",
+            verified_at: new Date(),
+            password: hashedPassword,
+        },
+        create: {
             username: "admin",
             email: "umartaufiq8284@ugm.ac.id",
             name: "Admin User",
@@ -25,7 +34,7 @@ export const usersSeed = async () => {
             verified_at: new Date(),
             password: hashedPassword,
             createdAt: randPastDate({ years: 1 }),
-        }
+        },
     });
 
     // for (let index = 0; index < 200; index++) {

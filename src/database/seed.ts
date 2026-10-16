@@ -6,6 +6,7 @@ import { user_classesSeed } from "./seeders/user_classes.seed";
 import { categoriesSeed } from "./seeders/categories.seed";
 import { sectionsSeeder } from "./seeders/sections.seed";
 import { materialsSeed } from "./seeders/materials.seed";
+import { workshopsSeed } from "./seeders/workshops.seed";
 import prisma from "../database";
 async function main() {
     console.log("🌱 Seeding database...");
@@ -17,6 +18,7 @@ async function main() {
     await user_classesSeed();
     await sectionsSeeder();
     await materialsSeed();
+    await workshopsSeed();
 
     console.log("✅ Seeding finished.");
 }

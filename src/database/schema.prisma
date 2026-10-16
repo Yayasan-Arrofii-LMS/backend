@@ -66,6 +66,8 @@ model User {
   FileToken       FileToken[]
   interests       UserInterest[]
   activities      MaterialActivity[]
+  workshopsInstructed    Workshop[]            @relation("WorkshopInstructor")
+  workshopParticipations WorkshopParticipant[]
 }
 
 model Xp {
@@ -127,6 +129,7 @@ model Category {
   materials Material[]
   classes   Class[]
   interests UserInterest[]
+  workshops Workshop[]
 }
 
 model UserInterest {
@@ -341,8 +344,44 @@ model FileToken {
   id             Int           @id @default(autoincrement())
   token          String        @unique
   expireAt       DateTime
-  Material_File  Material_File @relation(fields: [materialFileId], references: [id], onDelete: Cascade)
+  Material_File Material_File @relation(fields: [materialFileId], references: [id], onDelete: Cascade)
   materialFileId Int
   User           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId         String
+}
+
+model Workshop {
+  id           Int                   @id @default(autoincrement())
+  title        String
+  description  String                @db.LongText
+  thumbnail    String
+  date         String
+  startTime    String
+  endTime      String
+  type         String
+  location     String?
+  meetingLink  String?
+  quota        Int
+  status       String                @default("Upcoming")
+  categoryId   Int?
+  instructorId String
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  category     Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  instructor   User                  @relation("WorkshopInstructor", fields: [instructorId], references: [id], onDelete: Cascade)
+  participants WorkshopParticipant[]
+}
+
+model WorkshopParticipant {
+  id               Int      @id @default(autoincrement())
+  workshopId       Int
+  userId           String
+  status           String   @default("Terdaftar")
+  notes            String?
+  registrationDate DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  workshop         Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workshopId, userId])
 }
