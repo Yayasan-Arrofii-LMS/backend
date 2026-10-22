@@ -8,7 +8,9 @@ export class QuizController {
     // === TEACHER: Quiz ===
     static async getQuizzesBySection(req: Request, res: Response) {
         try {
-            const sectionId = parseInt(req.params.sectionId);
+            const sectionId =
+                parseInt(req.params.sectionId) ||
+                parseInt(req.query.sectionId as string);
             if (isNaN(sectionId)) {
                 throw new Error('Invalid section ID');
             }
@@ -35,7 +37,9 @@ export class QuizController {
 
     static async createQuiz(req: Request, res: Response) {
         try {
-            const sectionId = parseInt(req.params.sectionId);
+            const sectionId =
+                parseInt(req.params.sectionId) ||
+                parseInt(req.body.sectionId);
 
             if (isNaN(sectionId) || !sectionId) {
                 return sendResponse({
@@ -230,7 +234,6 @@ export class QuizController {
             if (isNaN(quizId)) {
                 throw new Error('Invalid quiz ID');
             }
-            // Check if user is student (hide answers and explanation)
             const isStudent = req.role === 'Student';
             const questions = await QuizService.getAllQuestions(quizId, isStudent);
             return sendResponse({
@@ -243,7 +246,7 @@ export class QuizController {
         } catch (error) {
             return sendResponse({
                 res,
-                statusCode: 500,
+                statusCode: 403,
                 success: false,
                 message: (error as Error).message,
                 data: null,
@@ -257,7 +260,6 @@ export class QuizController {
             if (isNaN(questionId)) {
                 throw new Error('Invalid question ID');
             }
-            // Check if user is student (hide answers and explanation)
             const isStudent = req.role === 'Student';
             const question = await QuizService.getQuestionById(questionId, isStudent);
             return sendResponse({
@@ -270,7 +272,7 @@ export class QuizController {
         } catch (error) {
             return sendResponse({
                 res,
-                statusCode: 500,
+                statusCode: 403,
                 success: false,
                 message: (error as Error).message,
                 data: null,
@@ -278,7 +280,7 @@ export class QuizController {
         }
     }
 
-    // === STUDENT ===
+    // === STUDENT ADAPTIVE QUIZ ===
     static async startQuizAttempt(req: Request, res: Response) {
         try {
             const quizId = parseInt(req.params.quizId);
@@ -288,10 +290,56 @@ export class QuizController {
             const attempt = await QuizService.startQuizAttempt(req.user!.id!, { quizId });
             return sendResponse({
                 res,
-                statusCode: 201,
+                statusCode: 200,
                 success: true,
                 message: 'Quiz attempt started',
                 data: attempt,
+            });
+        } catch (error) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: (error as Error).message,
+                data: null,
+            });
+        }
+    }
+
+    static async getCurrentAttemptQuestion(req: Request, res: Response) {
+        try {
+            const attemptId = parseInt(req.params.attemptId);
+            if (isNaN(attemptId)) {
+                throw new Error('Invalid attempt ID');
+            }
+            const current = await QuizService.getCurrentAttemptQuestion(req.user!.id!, attemptId);
+            return sendResponse({
+                res,
+                statusCode: 200,
+                success: true,
+                message: 'Current active question retrieved',
+                data: current,
+            });
+        } catch (error) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: (error as Error).message,
+                data: null,
+            });
+        }
+    }
+
+    static async submitAdaptiveAnswer(req: Request, res: Response) {
+        try {
+            const result = await QuizService.submitAdaptiveAnswer(req.user!.id!, req.body);
+            return sendResponse({
+                res,
+                statusCode: 200,
+                success: true,
+                message: result.done ? 'Seluruh soal telah selesai dijawab' : 'Answer evaluated',
+                data: result,
             });
         } catch (error) {
             return sendResponse({
@@ -352,7 +400,11 @@ export class QuizController {
             if (isNaN(attemptId)) {
                 throw new Error('Invalid attempt ID');
             }
-            const result = await QuizService.getAttemptResult(req.user!.id!, { attemptId });
+            const result = await QuizService.getAttemptResult(
+                req.user!.id!,
+                { attemptId },
+                req.role ?? 'Student'
+            );
             return sendResponse({
                 res,
                 statusCode: 200,
@@ -433,7 +485,11 @@ export class QuizController {
             if (isNaN(attemptId)) {
                 throw new Error('Invalid attempt ID');
             }
-            const review = await QuizService.getQuizReview(req.user!.id!, attemptId);
+            const review = await QuizService.getQuizReview(
+                req.user!.id!,
+                attemptId,
+                req.role ?? 'Student'
+            );
             return sendResponse({
                 res,
                 statusCode: 200,
@@ -480,17 +536,29 @@ export class QuizController {
     }
 
     static async bulkCreate(req: Request, res: Response) {
-        const sectionId = parseInt(req.params.sectionId);
+        const sectionId =
+            parseInt(req.params.sectionId) ||
+            parseInt(req.body.sectionId);
         const bulkCreate: BulkCreateQuestionsInput = req.body;
 
         try {
+            if (isNaN(sectionId) || !sectionId) {
+                return sendResponse({
+                    res,
+                    statusCode: 400,
+                    success: false,
+                    message: 'Section ID is required and must be a valid number',
+                    data: null,
+                });
+            }
+
             const result = await QuizService.bulkCreate(sectionId, bulkCreate);
             return sendResponse({
                 res,
                 statusCode: 201,
                 success: true,
                 message: 'Bulk quiz creation successful',
-                data: null, // Replace null with result when service is implemented
+                data: result,
             });
         } catch (error) {
             return sendResponse({
@@ -501,6 +569,5 @@ export class QuizController {
                 data: null,
             });
         }
-
     }
 }

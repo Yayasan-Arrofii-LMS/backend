@@ -9,6 +9,7 @@ import {
     createQuestionSchema,
     updateQuestionSchema,
     saveAnswerSchema,
+    adaptiveAnswerSchema,
     submitQuizSchema,
     bulkCreateQuestionsSchema,
 } from '../schemas/quiz.schema';
@@ -24,7 +25,7 @@ router.get(
     QuizController.getQuizByIdForStudent
 );
 
-// Start quiz attempt
+// Start quiz attempt (Adaptive: returns 1st question)
 router.post(
     '/:quizId/start',
     authMiddleware,
@@ -32,7 +33,24 @@ router.post(
     QuizController.startQuizAttempt
 );
 
-// Save answer (auto-save)
+// Get current active question (Adaptive resume / refresh)
+router.get(
+    '/attempts/:attemptId/current',
+    authMiddleware,
+    verifyRole(['Student']),
+    QuizController.getCurrentAttemptQuestion
+);
+
+// Submit adaptive answer & get next question
+router.post(
+    '/adaptive/answer',
+    authMiddleware,
+    verifyRole(['Student']),
+    validateBody(adaptiveAnswerSchema),
+    QuizController.submitAdaptiveAnswer
+);
+
+// Save answer (legacy auto-save compatibility)
 router.post(
     '/save-answer',
     authMiddleware,
@@ -40,7 +58,7 @@ router.post(
     QuizController.saveAnswer
 );
 
-// Submit quiz (final)
+// Submit quiz (final / auto-submit on timeout)
 router.post(
     '/submit',
     authMiddleware,
@@ -48,7 +66,7 @@ router.post(
     QuizController.submitQuiz
 );
 
-// Get attempt result
+// Get attempt result (Student, Teacher, Admin)
 router.get(
     '/attempts/:attemptId/result',
     authMiddleware,
@@ -62,14 +80,14 @@ router.get(
     QuizController.getMyAttempts
 );
 
-// Get all questions for an attempt (resume failed attempt)
+// Get already-served questions for an attempt (Guard anti-bocor)
 router.get(
     '/attempts/:attemptId/questions',
     authMiddleware,
     QuizController.getAttemptQuestions
 );
 
-// Get quiz review with explanations (after submission)
+// Get quiz review with explanations (after submission; respects show_review)
 router.get(
     '/attempts/:attemptId/review',
     authMiddleware,
@@ -89,15 +107,16 @@ router.get(
 router.post(
     '/',
     authMiddleware,
-    verifyRole(['Teacher', "Admin"]),
+    verifyRole(['Teacher', 'Admin']),
     validateBody(createQuizSchema),
     QuizController.createQuiz
 );
 
-// Get all questions by quiz (Teacher sees answers, Student doesn't)
+// Get all questions by quiz (Guard anti-bocor: Teacher/Admin only)
 router.get(
     '/:quizId/questions',
     authMiddleware,
+    verifyRole(['Teacher', 'Admin']),
     QuizController.getAllQuestions
 );
 
@@ -105,15 +124,16 @@ router.get(
 router.post(
     '/:quizId/questions',
     authMiddleware,
-    verifyRole(['Teacher', "Admin"]),
+    verifyRole(['Teacher', 'Admin']),
     validateBody(createQuestionSchema),
     QuizController.createQuestion
 );
 
-// Get question by ID (Teacher sees answers, Student doesn't)
+// Get question by ID (Guard anti-bocor: Teacher/Admin only)
 router.get(
     '/questions/:questionId',
     authMiddleware,
+    verifyRole(['Teacher', 'Admin']),
     QuizController.getQuestionById
 );
 
@@ -121,7 +141,7 @@ router.get(
 router.put(
     '/questions/:questionId',
     authMiddleware,
-    verifyRole(['Teacher', "Admin"]),
+    verifyRole(['Teacher', 'Admin']),
     validateBody(updateQuestionSchema),
     QuizController.updateQuestion
 );
@@ -130,15 +150,24 @@ router.put(
 router.delete(
     '/questions/:questionId',
     authMiddleware,
-    verifyRole(['Teacher', "Admin"]),
+    verifyRole(['Teacher', 'Admin']),
     QuizController.deleteQuestion
+);
+
+// Bulk create quiz & questions
+router.post(
+    '/bulk-create',
+    authMiddleware,
+    verifyRole(['Teacher', 'Admin']),
+    validateBody(bulkCreateQuestionsSchema),
+    QuizController.bulkCreate
 );
 
 // Get quiz by ID (must be after specific routes like /detail/:quizId)
 router.get(
     '/:id',
     authMiddleware,
-    verifyRole(['Teacher', "Admin"]),
+    verifyRole(['Teacher', 'Admin']),
     QuizController.getQuiz
 );
 
@@ -146,7 +175,7 @@ router.get(
 router.put(
     '/:id',
     authMiddleware,
-    verifyRole(['Teacher', "Admin"]),
+    verifyRole(['Teacher', 'Admin']),
     validateBody(updateQuizSchema),
     QuizController.updateQuiz
 );
@@ -155,16 +184,8 @@ router.put(
 router.delete(
     '/:id',
     authMiddleware,
-    verifyRole(['Teacher', "Admin"]),
+    verifyRole(['Teacher', 'Admin']),
     QuizController.deleteQuiz
 );
 
-
-router.post(
-    '/bulk-create',
-    authMiddleware,
-    verifyRole(['Teacher', "Admin"]),
-    validateBody(bulkCreateQuestionsSchema),
-    QuizController.bulkCreate
-);
 export default router;

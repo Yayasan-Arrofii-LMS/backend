@@ -7,11 +7,12 @@
     "close_at": "2026-02-06T23:59:59Z",
     "passing_grade": 70,
     "xp": 100,
+    "show_review": true,
     "questions": [
         {
             "question": "Berapakah hasil dari 25 + 17?",
             "type": "MultipleChoice",
-            "points": 10,
+            "difficulty": "Easy",
             "explanation": "Penjumlahan sederhana: 25 + 17 = 42",
             "answers": [
                 {
@@ -35,7 +36,7 @@
         {
             "question": "Hasil dari 144 dibagi 12 adalah 12",
             "type": "TrueFalse",
-            "points": 10,
+            "difficulty": "Easy",
             "explanation": "Benar, 144 ÷ 12 = 12",
             "answers": [
                 {
@@ -49,15 +50,9 @@
             ]
         },
         {
-            "question": "Jelaskan langkah-langkah cara menyelesaikan persamaan linear: 2x + 5 = 13",
-            "type": "Essay",
-            "points": 20,
-            "explanation": "Langkah: 1) Kurangkan 5 dari kedua sisi: 2x = 8, 2) Bagi kedua sisi dengan 2: x = 4"
-        },
-        {
             "question": "Manakah yang merupakan bilangan prima?",
             "type": "MultipleChoice",
-            "points": 10,
+            "difficulty": "Medium",
             "explanation": "Bilangan prima adalah bilangan yang hanya habis dibagi 1 dan dirinya sendiri",
             "answers": [
                 {
@@ -81,8 +76,18 @@
         {
             "question": "Persentase adalah bentuk lain dari pecahan dengan penyebut 100",
             "type": "TrueFalse",
-            "points": 10,
-            "explanation": "Benar, persentase (%) selalu memiliki penyebut 100"
+            "difficulty": "Hard",
+            "explanation": "Benar, persentase (%) selalu memiliki penyebut 100",
+            "answers": [
+                {
+                    "answer": "True",
+                    "is_correct": true
+                },
+                {
+                    "answer": "False",
+                    "is_correct": false
+                }
+            ]
         }
     ]
 }

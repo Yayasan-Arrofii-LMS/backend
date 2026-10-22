@@ -7,7 +7,11 @@ import { categoriesSeed } from "./seeders/categories.seed";
 import { sectionsSeeder } from "./seeders/sections.seed";
 import { materialsSeed } from "./seeders/materials.seed";
 import { workshopsSeed } from "./seeders/workshops.seed";
+import { quizzesSeed } from "./seeders/quizzes.seed";
+import { quiz_questionsSeed } from "./seeders/quiz_questions.seed";
+import { quiz_answersSeed } from "./seeders/quiz_answers.seed";
 import prisma from "../database";
+
 async function main() {
     console.log("🌱 Seeding database...");
 
@@ -18,6 +22,9 @@ async function main() {
     await user_classesSeed();
     await sectionsSeeder();
     await materialsSeed();
+    await quizzesSeed();
+    await quiz_questionsSeed();
+    await quiz_answersSeed();
     await workshopsSeed();
 
     console.log("✅ Seeding finished.");

@@ -1,4 +1,5 @@
-﻿import prisma from '../../../database';
+import prisma from '../../../database';
+import { AbilityLevel, getAbilityLevelFromScore } from '../helpers/adaptiveEngine';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -22,9 +23,84 @@ export interface RecommendationItem {
     repeat?: boolean;
 }
 
+export interface SectionQuizDiagnostic {
+    sectionId: number;
+    quizId: number;
+    percentageScore: number;
+    passingGrade: number;
+    isPassed: boolean;
+    abilityEstimate: number;
+    abilityLevel: AbilityLevel;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Normalizes an attempt's score into a percentage (0–100) for comparison with `passing_grade`.
+ * - New adaptive attempts (`ability_estimate !== null && ability_estimate !== undefined`):
+ *   `score` is already stored as a percentage (0–100).
+ * - Legacy attempts (`ability_estimate == null`):
+ *   `score` was stored as raw points, so convert to percentage using total quiz question points.
+ */
+export function computeAttemptPercentageScore(attempt: {
+    score: number | null;
+    ability_estimate?: number | null;
+    quiz: {
+        quiz_question?: { points: number; type?: string }[];
+    };
+}): number | null {
+    if (attempt.score === null || attempt.score === undefined) {
+        return null;
+    }
+
+    if (attempt.ability_estimate !== null && attempt.ability_estimate !== undefined) {
+        return attempt.score;
+    }
+
+    const questions = attempt.quiz.quiz_question ?? [];
+    const totalPossiblePoints = questions.reduce((sum, q) => sum + q.points, 0);
+
+    if (totalPossiblePoints > 0) {
+        return Math.round((attempt.score / totalPossiblePoints) * 100);
+    }
+
+    return attempt.score;
+}
+
+/**
+ * Menentukan kecocokan kesulitan materi dengan estimasi kemampuan siswa (theta / level)
+ * sebagai tie-breaker pengurutan rekomendasi remedial & lanjutan.
+ */
+export function getMaterialDifficultySuitability(
+    materialDifficulty: string | null,
+    diagnostic?: SectionQuizDiagnostic
+): number {
+    if (!materialDifficulty) return 0;
+    const diff = materialDifficulty.toLowerCase();
+
+    if (!diagnostic || !diagnostic.isPassed || diagnostic.abilityLevel === 'Dasar') {
+        // Saat remedial / level Dasar: utamakan materi Easy lalu Medium agar mudah dipahami
+        if (diff === 'easy') return 3;
+        if (diff === 'medium') return 2;
+        if (diff === 'hard') return 1;
+        return 0;
+    }
+
+    if (diagnostic.abilityLevel === 'Cakap') {
+        if (diff === 'medium') return 3;
+        if (diff === 'easy') return 2;
+        if (diff === 'hard') return 1;
+        return 0;
+    }
+
+    // Level Mahir: utamakan materi Hard / Medium untuk pengayaan
+    if (diff === 'hard') return 3;
+    if (diff === 'medium') return 2;
+    if (diff === 'easy') return 1;
+    return 0;
+}
 
 async function getEnrolledSectionIds(userId: string): Promise<Set<number>> {
     const enrollments = await prisma.user_Class.findMany({
@@ -74,7 +150,9 @@ async function getSectionsWithAnyCompletion(
     return new Set(materials.map((m) => m.sectionId));
 }
 
-async function getFailingQuizSectionIds(userId: string): Promise<Set<number>> {
+export async function getSectionQuizDiagnostics(
+    userId: string
+): Promise<Map<number, SectionQuizDiagnostic>> {
     const attempts = await prisma.quiz_Attempt.findMany({
         where: {
             userId,
@@ -85,10 +163,17 @@ async function getFailingQuizSectionIds(userId: string): Promise<Set<number>> {
         select: {
             quizId: true,
             score: true,
+            ability_estimate: true,
             quiz: {
                 select: {
                     passing_grade: true,
                     sectionId: true,
+                    quiz_question: {
+                        select: {
+                            points: true,
+                            type: true,
+                        },
+                    },
                 },
             },
         },
@@ -101,13 +186,31 @@ async function getFailingQuizSectionIds(userId: string): Promise<Set<number>> {
         }
     }
 
-    const failingSectionIds = new Set<number>();
+    const diagnosticsBySection = new Map<number, SectionQuizDiagnostic>();
     for (const a of latestByQuiz.values()) {
-        if (a.score !== null && a.score < a.quiz.passing_grade) {
-            failingSectionIds.add(a.quiz.sectionId);
+        const percentageScore = computeAttemptPercentageScore(a);
+        if (percentageScore === null) continue;
+
+        const isPassed = percentageScore >= a.quiz.passing_grade;
+        const abilityEstimate = a.ability_estimate ?? 0;
+        const abilityLevel = getAbilityLevelFromScore(percentageScore);
+
+        const existing = diagnosticsBySection.get(a.quiz.sectionId);
+        // Jika satu section punya lebih dari satu kuis, prioritaskan kuis yang belum lulus (remedial)
+        if (!existing || (!isPassed && existing.isPassed)) {
+            diagnosticsBySection.set(a.quiz.sectionId, {
+                sectionId: a.quiz.sectionId,
+                quizId: a.quizId,
+                percentageScore,
+                passingGrade: a.quiz.passing_grade,
+                isPassed,
+                abilityEstimate,
+                abilityLevel,
+            });
         }
     }
-    return failingSectionIds;
+
+    return diagnosticsBySection;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,11 +222,18 @@ export class RecommendationService {
         const enrolledSectionIds = await getEnrolledSectionIds(userId);
         if (enrolledSectionIds.size === 0) return [];
 
-        const [interestCategoryIds, completedMaterialIds, failingSectionIds] = await Promise.all([
+        const [interestCategoryIds, completedMaterialIds, sectionDiagnostics] = await Promise.all([
             getUserInterestCategoryIds(userId),
             getCompletedMaterialIds(userId),
-            getFailingQuizSectionIds(userId),
+            getSectionQuizDiagnostics(userId),
         ]);
+
+        const failingSectionIds = new Set<number>();
+        for (const [sectionId, diag] of sectionDiagnostics.entries()) {
+            if (!diag.isPassed) {
+                failingSectionIds.add(sectionId);
+            }
+        }
 
         const sectionsWithAnyCompletion = await getSectionsWithAnyCompletion(userId, completedMaterialIds);
 
@@ -161,7 +271,10 @@ export class RecommendationService {
             }
         }
 
-        const scored: (RecommendationItem & { _completedAt?: Date })[] = [];
+        const scored: (RecommendationItem & {
+            _completedAt?: Date;
+            _suitability?: number;
+        })[] = [];
 
         for (const material of materials) {
             const isCompleted = completedMaterialIds.has(material.id);
@@ -192,7 +305,13 @@ export class RecommendationService {
                 reasons.push('lanjutan');
             }
 
-            const item: RecommendationItem & { _completedAt?: Date } = {
+            const diag = sectionDiagnostics.get(material.sectionId);
+            const suitability = getMaterialDifficultySuitability(material.difficulty, diag);
+
+            const item: RecommendationItem & {
+                _completedAt?: Date;
+                _suitability?: number;
+            } = {
                 material: {
                     id: material.id,
                     title: material.title,
@@ -205,6 +324,7 @@ export class RecommendationService {
                 },
                 reasons,
                 score,
+                _suitability: suitability,
             };
 
             if (isRemedialRepeat) {
@@ -215,12 +335,15 @@ export class RecommendationService {
             scored.push(item);
         }
 
-        // Sort: score desc → remedial first → oldest completion first for repeats
+        // Sort: score desc → remedial first → adaptive suitability desc → oldest completion first for repeats
         scored.sort((a, b) => {
             if (b.score !== a.score) return b.score - a.score;
             const aIsRemedial = a.reasons.includes('remedial');
             const bIsRemedial = b.reasons.includes('remedial');
             if (aIsRemedial !== bIsRemedial) return aIsRemedial ? -1 : 1;
+            const aSuit = a._suitability ?? 0;
+            const bSuit = b._suitability ?? 0;
+            if (bSuit !== aSuit) return bSuit - aSuit;
             if (a.repeat && b.repeat) {
                 const aDate = a._completedAt?.getTime() ?? 0;
                 const bDate = b._completedAt?.getTime() ?? 0;
@@ -229,7 +352,9 @@ export class RecommendationService {
             return 0;
         });
 
-        return scored.slice(0, limit).map(({ _completedAt, ...rest }) => rest);
+        return scored
+            .slice(0, limit)
+            .map(({ _completedAt, _suitability, ...rest }) => rest);
     }
 }
 

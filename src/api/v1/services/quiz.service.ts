@@ -1,6 +1,7 @@
 import { QuizRepository } from '../repositories/quiz.repository';
 import prisma from '../../../database';
 import {
+    AdaptiveAnswerInput,
     CreateQuestionInput,
     CreateQuizInput,
     StartQuizAttemptInput,
@@ -9,8 +10,37 @@ import {
     GetAttemptResultInput,
     UpdateQuestionInput,
     UpdateQuizInput,
+    getDifficultyRating,
 } from '../types/quiz.type';
 import { BulkCreateQuestionsInput } from '../schemas/quiz.schema';
+
+export function buildQuestionBankWarnings(
+    questions: { type: string; difficulty?: string | null }[]
+): string[] {
+    const warnings: string[] = [];
+    const activeQuestions = questions.filter(
+        (q) => q.type === 'MultipleChoice' || q.type === 'TrueFalse'
+    );
+
+    if (activeQuestions.length < 3) {
+        warnings.push(
+            'Bank soal memiliki kurang dari 3 soal (MultipleChoice/TrueFalse). Disarankan minimal 3 soal agar kuis adaptif berjalan optimal.'
+        );
+    }
+
+    if (activeQuestions.length >= 1) {
+        const distinctDifficulties = new Set(
+            activeQuestions.map((q) => q.difficulty ?? 'Medium')
+        );
+        if (distinctDifficulties.size === 1) {
+            warnings.push(
+                'Semua soal memiliki tingkat kesulitan yang sama. Variasikan tingkat kesulitan (Easy, Medium, Hard) agar urutan adaptif berpengaruh.'
+            );
+        }
+    }
+
+    return warnings;
+}
 
 export class QuizService {
     // === Quiz ===
@@ -19,7 +49,6 @@ export class QuizService {
     }
 
     static async getQuizzesBySectionForStudent(sectionId: number, userId: string) {
-        // Validate that section exists
         const section = await prisma.section.findUnique({
             where: { id: sectionId },
         });
@@ -32,7 +61,6 @@ export class QuizService {
     }
 
     static async createQuiz(data: CreateQuizInput) {
-        // Validate that section exists
         const section = await prisma.section.findUnique({
             where: { id: data.sectionId },
         });
@@ -47,7 +75,11 @@ export class QuizService {
     static async getQuizById(id: number) {
         const quiz = await QuizRepository.getQuizById(id);
         if (!quiz) throw new Error('Quiz not found');
-        return quiz;
+        const warnings = buildQuestionBankWarnings(quiz.quiz_question ?? []);
+        return {
+            ...quiz,
+            warnings,
+        };
     }
 
     static async getQuizByIdForStudent(quizId: number, userId: string) {
@@ -66,12 +98,31 @@ export class QuizService {
 
     // === Question ===
     static async createQuestion(quizId: number, data: CreateQuestionInput) {
+        if ((data.type as string) === 'Essay') {
+            throw new Error('Tipe soal Essay tidak didukung pada kuis adaptif. Gunakan MultipleChoice atau TrueFalse');
+        }
         await this.getQuizById(quizId);
-        return QuizRepository.createQuestion(quizId, data);
+        const created = await QuizRepository.createQuestion(quizId, data);
+        const quiz = await QuizRepository.getQuizById(quizId);
+        const warnings = buildQuestionBankWarnings(quiz?.quiz_question ?? []);
+        return {
+            ...created,
+            warnings,
+        };
     }
 
     static async updateQuestion(questionId: number, data: UpdateQuestionInput) {
-        return QuizRepository.updateQuestion(questionId, data);
+        if ((data.type as string) === 'Essay') {
+            throw new Error('Tipe soal Essay tidak didukung pada kuis adaptif. Gunakan MultipleChoice atau TrueFalse');
+        }
+        const updated = await QuizRepository.updateQuestion(questionId, data);
+        if (!updated) throw new Error('Question not found');
+        const quiz = await QuizRepository.getQuizById(updated.quizId);
+        const warnings = buildQuestionBankWarnings(quiz?.quiz_question ?? []);
+        return {
+            ...updated,
+            warnings,
+        };
     }
 
     static async deleteQuestion(questionId: number) {
@@ -79,17 +130,23 @@ export class QuizService {
     }
 
     static async getAllQuestions(quizId: number, isStudent: boolean = false) {
+        if (isStudent) {
+            throw new Error('Akses ditolak: siswa tidak diizinkan mengambil seluruh daftar soal kuis secara langsung');
+        }
         await this.getQuizById(quizId);
         return QuizRepository.getAllQuestions(quizId, isStudent);
     }
 
     static async getQuestionById(questionId: number, isStudent: boolean = false) {
+        if (isStudent) {
+            throw new Error('Akses ditolak: siswa hanya dapat mengakses soal melalui sesi pengerjaan kuis');
+        }
         const question = await QuizRepository.getQuestionById(questionId, isStudent);
         if (!question) throw new Error('Question not found');
         return question;
     }
 
-    // === Student ===0
+    // === Student Adaptive Quiz ===
     static async startQuizAttempt(userId: string, data: StartQuizAttemptInput) {
         const quiz = await this.getQuizById(data.quizId);
 
@@ -108,33 +165,85 @@ export class QuizService {
             throw new Error('Quiz sudah ditutup');
         }
 
-        // Check max attempts
         const attempts = await QuizRepository.getStudentAttempts(userId, data.quizId);
-        const submittedAttempts = attempts.filter((a) => a.submitted_at !== null);
+        const ongoingAttempt = attempts.find((a) => a.submitted_at === null);
+
+        if (ongoingAttempt) {
+            const timeElapsed = now.getTime() - ongoingAttempt.started_at.getTime();
+            const timeLimitMs = quiz.time_limit * 60 * 1000;
+
+            if (timeElapsed < timeLimitMs) {
+                // Resume attempt yang sedang berjalan (hanya kirim 1 soal aktif)
+                return QuizRepository.getCurrentAttemptQuestion(ongoingAttempt.id);
+            } else {
+                // Auto-submit attempt yang sudah habis waktu
+                await QuizRepository.submitQuiz(ongoingAttempt.id);
+            }
+        }
+
+        // Hitung ulang jumlah attempt yang sudah selesai setelah auto-submit
+        const updatedAttempts = await QuizRepository.getStudentAttempts(userId, data.quizId);
+        const submittedAttempts = updatedAttempts.filter((a) => a.submitted_at !== null);
 
         if (submittedAttempts.length >= quiz.max_attempts) {
             throw new Error('Maksimal percobaan telah tercapai');
         }
 
-        // Check if there's an ongoing attempt
-        const ongoingAttempt = attempts.find((a) => a.submitted_at === null);
-        if (ongoingAttempt) {
-            // Check if time limit exceeded
-            const now = new Date();
-            const timeElapsed = now.getTime() - ongoingAttempt.started_at.getTime();
-            const timeLimitMs = quiz.time_limit * 60 * 1000;
+        // Buat attempt adaptif baru dan kembalikan soal pertama
+        return QuizRepository.startQuizAttempt(userId, data.quizId);
+    }
 
-            if (timeElapsed < timeLimitMs) {
-                // Return existing attempt
-                return QuizRepository.getAttemptById(ongoingAttempt.id);
-            } else {
-                // Auto-submit expired attempt
-                await QuizRepository.submitQuiz(ongoingAttempt.id);
-            }
+    static async getCurrentAttemptQuestion(userId: string, attemptId: number) {
+        const attempt = await QuizRepository.getAttemptById(attemptId);
+        if (!attempt) {
+            throw new Error('Attempt tidak ditemukan');
         }
 
-        // Create new attempt
-        return QuizRepository.startQuizAttempt(userId, data.quizId);
+        if (attempt.userId !== userId) {
+            throw new Error('Anda tidak memiliki akses ke attempt ini');
+        }
+
+        if (attempt.submitted_at) {
+            throw new Error('Quiz sudah di-submit');
+        }
+
+        const now = new Date();
+        const timeElapsed = now.getTime() - attempt.started_at.getTime();
+        const timeLimitMs = attempt.quiz.time_limit * 60 * 1000;
+
+        if (timeElapsed >= timeLimitMs || now > new Date(attempt.quiz.close_at)) {
+            await QuizRepository.submitQuiz(attemptId);
+            throw new Error('Waktu quiz telah habis');
+        }
+
+        return QuizRepository.getCurrentAttemptQuestion(attemptId);
+    }
+
+    static async submitAdaptiveAnswer(userId: string, data: AdaptiveAnswerInput) {
+        const attempt = await QuizRepository.getAttemptById(data.attemptId);
+        if (!attempt) {
+            throw new Error('Attempt tidak ditemukan');
+        }
+
+        if (attempt.userId !== userId) {
+            throw new Error('Anda tidak memiliki akses ke attempt ini');
+        }
+
+        if (attempt.submitted_at) {
+            throw new Error('Quiz sudah di-submit');
+        }
+
+        const now = new Date();
+        const timeElapsed = now.getTime() - attempt.started_at.getTime();
+        const timeLimitMs = attempt.quiz.time_limit * 60 * 1000;
+
+        if (timeElapsed > timeLimitMs || now > new Date(attempt.quiz.close_at)) {
+            // Auto-submit attempt di luar transaksi pelempar error agar status submit tersimpan
+            await QuizRepository.submitQuiz(data.attemptId);
+            throw new Error('Waktu quiz telah habis');
+        }
+
+        return QuizRepository.submitAdaptiveAnswer(data);
     }
 
     static async saveAnswer(userId: string, data: SaveAnswerInput) {
@@ -143,26 +252,23 @@ export class QuizService {
             throw new Error('Attempt tidak ditemukan');
         }
 
-        // Verify user owns this attempt
         if (attempt.userId !== userId) {
             throw new Error('Anda tidak memiliki akses ke attempt ini');
         }
 
-        // Check if already submitted
         if (attempt.submitted_at) {
             throw new Error('Quiz sudah di-submit');
         }
 
-        // Check time limit
         const now = new Date();
         const timeElapsed = now.getTime() - attempt.started_at.getTime();
         const timeLimitMs = attempt.quiz.time_limit * 60 * 1000;
 
-        if (timeElapsed > timeLimitMs) {
+        if (timeElapsed > timeLimitMs || now > new Date(attempt.quiz.close_at)) {
+            await QuizRepository.submitQuiz(data.attemptId);
             throw new Error('Waktu quiz telah habis');
         }
 
-        // Save answer
         return QuizRepository.saveAnswer(data);
     }
 
@@ -172,39 +278,71 @@ export class QuizService {
             throw new Error('Attempt tidak ditemukan');
         }
 
-        // Verify user owns this attempt
         if (attempt.userId !== userId) {
             throw new Error('Anda tidak memiliki akses ke attempt ini');
         }
 
-        // Check if already submitted
-        if (attempt.submitted_at) {
-            throw new Error('Quiz sudah di-submit');
-        }
-
-        // Submit and calculate score
         return QuizRepository.submitQuiz(data.attemptId);
     }
 
-    static async getAttemptResult(userId: string, data: GetAttemptResultInput) {
-        const attempt = await QuizRepository.getAttemptById(data.attemptId);
+    static async getAttemptResult(
+        userId: string,
+        data: GetAttemptResultInput,
+        requesterRole: string = 'Student'
+    ) {
+        let attempt = await QuizRepository.getAttemptById(data.attemptId);
         if (!attempt) {
             throw new Error('Attempt tidak ditemukan');
         }
 
-        // Verify user owns this attempt
-        if (attempt.userId !== userId) {
+        const isTeacherOrAdmin =
+            requesterRole === 'Teacher' || requesterRole === 'Admin';
+
+        if (!isTeacherOrAdmin && attempt.userId !== userId) {
             throw new Error('Anda tidak memiliki akses ke attempt ini');
         }
 
-        // Calculate score if not yet calculated
-        if (attempt.submitted_at && !attempt.is_graded) {
-            await QuizRepository.calculateScore(data.attemptId);
-            // Refetch attempt with updated score
-            return QuizRepository.getAttemptById(data.attemptId);
+        // Jika belum di-submit tapi waktu sudah habis, lakukan auto-submit
+        if (!attempt.submitted_at) {
+            const now = new Date();
+            const timeElapsed = now.getTime() - attempt.started_at.getTime();
+            const timeLimitMs = attempt.quiz.time_limit * 60 * 1000;
+            if (timeElapsed >= timeLimitMs || now > new Date(attempt.quiz.close_at)) {
+                await QuizRepository.submitQuiz(data.attemptId);
+                attempt = await QuizRepository.getAttemptById(data.attemptId);
+            } else {
+                throw new Error('Quiz belum di-submit');
+            }
+        } else if (!attempt.is_graded) {
+            await QuizRepository.submitQuiz(data.attemptId);
+            attempt = await QuizRepository.getAttemptById(data.attemptId);
         }
 
-        return attempt;
+        if (!attempt) {
+            throw new Error('Attempt tidak ditemukan');
+        }
+
+        return {
+            attemptId: attempt.id,
+            quizId: attempt.quizId,
+            quizTitle: attempt.quiz.title,
+            score: attempt.percentage,
+            percentage: attempt.percentage,
+            totalScore: 100,
+            passingGrade: attempt.quiz.passing_grade,
+            isPassed: attempt.isPassed,
+            totalQuestions: attempt.totalQuestions,
+            correctAnswersCount: attempt.correctAnswersCount,
+            abilityEstimate: attempt.abilityEstimate,
+            ability_estimate: attempt.abilityEstimate,
+            abilityLevel: attempt.abilityLevel,
+            ability_level: attempt.abilityLevel,
+            showReview: attempt.quiz.show_review,
+            show_review: attempt.quiz.show_review,
+            isGraded: attempt.is_graded,
+            startedAt: attempt.started_at,
+            submittedAt: attempt.submitted_at,
+        };
     }
 
     static async getMyAttempts(userId: string, quizId: number) {
@@ -217,12 +355,10 @@ export class QuizService {
             throw new Error('Attempt tidak ditemukan');
         }
 
-        // Verify user owns this attempt
         if (attempt.userId !== userId) {
             throw new Error('Anda tidak memiliki akses ke attempt ini');
         }
 
-        // Don't allow if already submitted
         if (attempt.submitted_at) {
             throw new Error('Quiz sudah disubmit, tidak bisa diubah lagi');
         }
@@ -230,12 +366,15 @@ export class QuizService {
         return QuizRepository.getAttemptQuestions(attemptId);
     }
 
-    static async getQuizReview(userId: string, attemptId: number) {
-        return QuizRepository.getQuizReview(attemptId, userId);
+    static async getQuizReview(
+        userId: string,
+        attemptId: number,
+        requesterRole: string = 'Student'
+    ) {
+        return QuizRepository.getQuizReview(attemptId, userId, requesterRole);
     }
 
     static async bulkCreate(sectionId: number, bulkCreate: BulkCreateQuestionsInput) {
-        // Validate that section exists
         const section = await prisma.section.findUnique({
             where: { id: sectionId },
         });
@@ -253,51 +392,48 @@ export class QuizService {
             close_at: new Date(bulkCreate.close_at),
             passing_grade: bulkCreate.passing_grade,
             xp: bulkCreate.xp,
+            show_review: bulkCreate.show_review ?? true,
             sectionId: sectionId,
-        }
+        };
 
         const questionsData = bulkCreate.questions;
 
-        // Create quiz and all questions in transaction
-        return await prisma.$transaction(async (tx) => {
-            // Create quiz
+        for (const q of questionsData) {
+            if ((q.type as string) === 'Essay') {
+                throw new Error('Tipe soal Essay tidak didukung pada kuis adaptif. Gunakan MultipleChoice atau TrueFalse');
+            }
+        }
+
+        const createdQuiz = await prisma.$transaction(async (tx) => {
             const quiz = await tx.quiz.create({
                 data: quizData,
             });
 
-            // Create all questions with their answers
-            const createdQuestions = await Promise.all(
-                questionsData.map(async (questionData) => {
-                    const question = await tx.quiz_Question.create({
-                        data: {
-                            question: questionData.question,
-                            type: questionData.type as any,
-                            points: questionData.points,
-                            explanation: questionData.explanation,
-                            quizId: quiz.id,
-                        },
+            for (const questionData of questionsData) {
+                const difficulty = questionData.difficulty ?? 'Medium';
+                const question = await tx.quiz_Question.create({
+                    data: {
+                        question: questionData.question,
+                        type: questionData.type as any,
+                        points: questionData.points ?? 1,
+                        difficulty,
+                        difficulty_rating: getDifficultyRating(difficulty),
+                        explanation: questionData.explanation,
+                        quizId: quiz.id,
+                    },
+                });
+
+                if (questionData.answers && questionData.answers.length > 0) {
+                    await tx.quiz_Answer.createMany({
+                        data: questionData.answers.map((a) => ({
+                            answer: a.answer,
+                            is_correct: a.is_correct,
+                            questionId: question.id,
+                        })),
                     });
+                }
+            }
 
-                    // Create answers if not Essay type
-                    if (questionData.type !== 'Essay' && questionData.answers) {
-                        await tx.quiz_Answer.createMany({
-                            data: questionData.answers.map((a) => ({
-                                answer: a.answer,
-                                is_correct: a.is_correct,
-                                questionId: question.id,
-                            })),
-                        });
-                    }
-
-                    // Return question with answers
-                    return tx.quiz_Question.findUnique({
-                        where: { id: question.id },
-                        include: { quiz_answer: true },
-                    });
-                })
-            );
-
-            // Return quiz with all questions
             return tx.quiz.findUnique({
                 where: { id: quiz.id },
                 include: {
@@ -308,5 +444,11 @@ export class QuizService {
                 },
             });
         });
+
+        const warnings = buildQuestionBankWarnings(createdQuiz?.quiz_question ?? []);
+        return {
+            ...createdQuiz,
+            warnings,
+        };
     }
 }

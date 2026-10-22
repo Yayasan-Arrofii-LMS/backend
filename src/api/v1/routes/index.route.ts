@@ -38,6 +38,8 @@ declare module "express-serve-static-core" {
 router.use("/teachers", authMiddleware, verifyRole(["Admin", "Teacher"]), teacherRouter);
 router.use("/dashboard", authMiddleware, verifyRole(["Admin"]), dashboardRouter);
 router.use("/classes/sections/:sectionId/quizzes", quizRouter);
+router.use("/quiz", quizRouter);
+router.use("/quizzes", quizRouter);
 router.use("/classes/sections/:sectionId/materials", materialRouter);
 router.use("/classes", authMiddleware, verifyRole(["Admin", "Teacher"]), classRouter);
 router.use("/classes/sections/materials/:materialId/files", materialFileRouter);
@@ -45,7 +47,7 @@ router.use("/material-images", materialImageRouter);
 router.use("/enrollment", enrollmentRouter);
 router.use("/classes/:classId/sections", sectionRouter);
 
-router.use("/", authRouter)
+router.use("/", authRouter);
 router.use("/students", authMiddleware, verifyRole(["Student", "Teacher", "Admin"]), studentRouter);
 router.use("/public", publicRouter);
 router.use("/profile", profileRouter);
