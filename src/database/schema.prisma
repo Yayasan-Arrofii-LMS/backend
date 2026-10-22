@@ -31,6 +31,12 @@ enum quiz_question_type {
   Essay
 }
 
+enum question_difficulty {
+  Easy
+  Medium
+  Hard
+}
+
 enum otp_type {
   PasswordReset
   EmailVerification
@@ -45,27 +51,27 @@ model Role {
 }
 
 model User {
-  id              String            @id @default(uuid())
-  email           String            @unique
-  username        String            @unique
-  name            String
-  password        String
-  profileImage    String
-  verified_at     DateTime?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  role            Role              @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  roleId          Int
-  xps             Xp[]
-  User_Class      User_Class[]
-  User_Material   User_Material[]
-  user_assignment User_Assignment[]
-  quiz_attempt    Quiz_Attempt[]
-  token           Reset_Token[]
-  OTP             OTP_Token[]
-  FileToken       FileToken[]
-  interests       UserInterest[]
-  activities      MaterialActivity[]
+  id                     String                @id @default(uuid())
+  email                  String                @unique
+  username               String                @unique
+  name                   String
+  password               String
+  profileImage           String
+  verified_at            DateTime?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  role                   Role                  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  roleId                 Int
+  xps                    Xp[]
+  User_Class             User_Class[]
+  User_Material          User_Material[]
+  user_assignment        User_Assignment[]
+  quiz_attempt           Quiz_Attempt[]
+  token                  Reset_Token[]
+  OTP                    OTP_Token[]
+  FileToken              FileToken[]
+  interests              UserInterest[]
+  activities             MaterialActivity[]
   workshopsInstructed    Workshop[]            @relation("WorkshopInstructor")
   workshopParticipations WorkshopParticipant[]
 }
@@ -82,14 +88,14 @@ model Xp {
 }
 
 model Class {
-  id          Int       @id @default(autoincrement())
+  id          Int          @id @default(autoincrement())
   name        String
-  description String    @db.LongText
+  description String       @db.LongText
   image_path  String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
   categoryId  Int?
-  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  category    Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   User_Class  User_Class[]
   Section     Section[]
 }
@@ -144,20 +150,20 @@ model UserInterest {
 }
 
 model Material {
-  id            Int             @id @default(autoincrement())
+  id            Int                @id @default(autoincrement())
   title         String
-  content       String          @db.LongText
-  xp            Int             @default(10)
+  content       String             @db.LongText
+  xp            Int                @default(10)
   video_link    String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
   sectionId     Int
   order         Int
   categoryId    Int?
-  category      Category?       @relation(fields: [categoryId], references: [id])
+  category      Category?          @relation(fields: [categoryId], references: [id])
   difficulty    String?
   mediaType     String?
-  Section       Section         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  Section       Section            @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   Material_File Material_File[]
   User_Material User_Material[]
   activities    MaterialActivity[]
@@ -249,6 +255,7 @@ model Quiz {
   close_at      DateTime
   passing_grade Int
   xp            Int
+  show_review   Boolean         @default(true)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   sectionId     Int
@@ -258,17 +265,21 @@ model Quiz {
 }
 
 model Quiz_Question {
-  id            Int                @id @default(autoincrement())
-  question      String             @db.LongText
-  type          quiz_question_type
-  points        Int
-  explanation   String?            @db.LongText
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  quizId        Int
-  quiz          Quiz               @relation(fields: [quizId], references: [id], onDelete: Cascade)
-  quiz_answer   Quiz_Answer[]
-  attemp_answer Attemp_Answer[]
+  id                Int                 @id @default(autoincrement())
+  question          String              @db.LongText
+  type              quiz_question_type
+  points            Int                 @default(1)
+  explanation       String?             @db.LongText
+  difficulty        question_difficulty @default(Medium)
+  difficulty_rating Float               @default(0)
+  times_answered    Int                 @default(0)
+  times_correct     Int                 @default(0)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  quizId            Int
+  quiz              Quiz                @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  quiz_answer       Quiz_Answer[]
+  attemp_answer     Attemp_Answer[]
 }
 
 model Quiz_Answer {
@@ -283,24 +294,31 @@ model Quiz_Answer {
 }
 
 model Quiz_Attempt {
-  id            Int             @id @default(autoincrement())
-  score         Int?
-  started_at    DateTime        @default(now())
-  submitted_at  DateTime?
-  is_graded     Boolean         @default(false)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  userId        String
-  quizId        Int
-  User          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  quiz          Quiz            @relation(fields: [quizId], references: [id], onDelete: Cascade)
-  attemp_answer Attemp_Answer[]
+  id               Int             @id @default(autoincrement())
+  score            Int?
+  ability_estimate Float?
+  started_at       DateTime        @default(now())
+  submitted_at     DateTime?
+  is_graded        Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  userId           String
+  quizId           Int
+  User             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz             Quiz            @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  attemp_answer    Attemp_Answer[]
 }
 
 model Attemp_Answer {
   id                     Int                      @id @default(autoincrement())
   path                   String?
   answer                 String?
+  order                  Int?
+  served_at              DateTime?
+  answered_at            DateTime?
+  is_correct             Boolean?
+  ability_before         Float?
+  ability_after          Float?
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
   attemptId              Int
@@ -344,7 +362,7 @@ model FileToken {
   id             Int           @id @default(autoincrement())
   token          String        @unique
   expireAt       DateTime
-  Material_File Material_File @relation(fields: [materialFileId], references: [id], onDelete: Cascade)
+  Material_File  Material_File @relation(fields: [materialFileId], references: [id], onDelete: Cascade)
   materialFileId Int
   User           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId         String
