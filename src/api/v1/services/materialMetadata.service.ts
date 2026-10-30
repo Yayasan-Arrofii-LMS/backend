@@ -1,9 +1,9 @@
-import { Material } from '@prisma/client';
 import prisma from '../../../database';
 import materialRepository from '../repositories/material.repository';
 import categoryRepository from '../repositories/category.repository';
 import { UpdateMaterialMetadataDto } from '../schemas/materialMetadata.schema';
 import { NotFoundError } from '../errors/notfound.error';
+import { estimateMaterialDuration } from '../helpers/materialContent.helper';
 
 type MaterialFilters = {
     categoryId?: number;
@@ -27,13 +27,30 @@ export class MaterialMetadataService {
             }
         }
 
+        const updateData: Record<string, any> = {};
+        if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
+        if (data.difficulty !== undefined) updateData.difficulty = data.difficulty;
+        if (data.mediaType !== undefined) updateData.mediaType = data.mediaType;
+
+        if (data.duration_minutes !== undefined) {
+            updateData.duration_minutes =
+                data.duration_minutes ??
+                estimateMaterialDuration({
+                    content: material.content,
+                    mediaType: data.mediaType !== undefined ? data.mediaType : material.mediaType,
+                    videoLink: material.video_link,
+                });
+        } else if (data.mediaType !== undefined && material.duration_minutes === null) {
+            updateData.duration_minutes = estimateMaterialDuration({
+                content: material.content,
+                mediaType: data.mediaType,
+                videoLink: material.video_link,
+            });
+        }
+
         return await prisma.material.update({
             where: { id: materialId },
-            data: {
-                categoryId: data.categoryId,
-                difficulty: data.difficulty,
-                mediaType: data.mediaType,
-            },
+            data: updateData,
             include: {
                 category: true,
                 Section: true,

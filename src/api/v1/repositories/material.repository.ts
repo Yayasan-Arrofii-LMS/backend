@@ -63,7 +63,10 @@ export class MaterialRepository {
         sectionId: number;
         order: number;
         video_link?: string | null;
+        duration_minutes?: number | null;
         categoryId?: number | null;
+        difficulty?: string | null;
+        mediaType?: string | null;
     }): Promise<MaterialWithFiles> {
         const material = await prisma.material.create({
             data,
@@ -81,7 +84,10 @@ export class MaterialRepository {
         sectionId: number;
         order: number;
         video_link: string | null;
+        duration_minutes: number | null;
         categoryId: number | null;
+        difficulty: string | null;
+        mediaType: string | null;
     }>): Promise<MaterialWithFiles> {
         const material = await prisma.material.update({
             where: { id },

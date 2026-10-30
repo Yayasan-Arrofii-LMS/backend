@@ -4,6 +4,7 @@ import { updateMaterialMetadataSchema } from "../schemas/materialMetadata.schema
 import materialMetadataController from "../controllers/materialMetadata.controller";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { verifyRole } from "../middlewares/verifyrole.middleware";
+import { verifyEnrollmentByMaterial } from "../middlewares/enrollment.middleware";
 
 const materialMetadataRouter = Router();
 
@@ -12,6 +13,14 @@ materialMetadataRouter.get(
     "/",
     authMiddleware,
     (req, res) => materialMetadataController.getMaterialsWithFilter(req, res)
+);
+
+// POST /materials/:materialId/complete — mark material completed for enrolled user
+materialMetadataRouter.post(
+    "/:materialId/complete",
+    authMiddleware,
+    verifyEnrollmentByMaterial,
+    (req, res) => materialMetadataController.completeMaterial(req, res)
 );
 
 // PATCH /materials/:materialId/metadata — Admin/Teacher only
