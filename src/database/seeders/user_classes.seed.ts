@@ -1,10 +1,8 @@
 import { class_role } from "@prisma/client";
 import prisma from "..";
-import { matkuls } from "./classes.seed";
-import { randWord } from "@ngneat/falso"; // ✅ use randWords instead of randWord
 
 export const user_classesSeed = async () => {
-    console.log("\n🌱 Seeding user_classes...");
+    console.log("\n🌱 Seeding user_classes (enrollment guru & siswa)...");
 
     const students = await prisma.user.findMany({
         where: { role: { name: "Student" } },
@@ -12,31 +10,44 @@ export const user_classesSeed = async () => {
     const teachers = await prisma.user.findMany({
         where: { role: { name: "Teacher" } },
     });
-
     const classes = await prisma.class.findMany();
 
-    if (students.length === 0 || classes.length === 0) {
-        throw new Error("Students and Classes must be seeded before seeding user_classes.");
+    if (students.length === 0 || classes.length === 0 || teachers.length === 0) {
+        throw new Error("Users (Students, Teachers) and Classes must be seeded before seeding user_classes.");
     }
 
-    // Attach teachers + students to already existing classes
-    for (const cls of classes) {
-        const shuffledStudents = [...students].sort(() => 0.5 - Math.random());
-        const selectedStudents = shuffledStudents.slice(0, 10);
+    for (let i = 0; i < classes.length; i++) {
+        const cls = classes[i];
+        // Pilih guru penanggung jawab secara bergantian
+        const assignedTeacher = teachers[i % teachers.length];
 
-        const selectedTeacher = teachers[Math.floor(Math.random() * teachers.length)];
-
-        await prisma.user_Class.create({
-            data: {
-                userId: selectedTeacher.id,
+        // Daftarkan Guru ke Kelas
+        await prisma.user_Class.upsert({
+            where: {
+                userId_classId: {
+                    userId: assignedTeacher.id,
+                    classId: cls.id,
+                },
+            },
+            update: { role: class_role.Teacher },
+            create: {
+                userId: assignedTeacher.id,
                 classId: cls.id,
                 role: class_role.Teacher,
             },
         });
 
-        for (const stu of selectedStudents) {
-            await prisma.user_Class.create({
-                data: {
+        // Daftarkan semua siswa ke kelas demo agar saat login siswa dapat melihat kelas aktif
+        for (const stu of students) {
+            await prisma.user_Class.upsert({
+                where: {
+                    userId_classId: {
+                        userId: stu.id,
+                        classId: cls.id,
+                    },
+                },
+                update: { role: class_role.Student },
+                create: {
                     userId: stu.id,
                     classId: cls.id,
                     role: class_role.Student,
@@ -45,55 +56,5 @@ export const user_classesSeed = async () => {
         }
     }
 
-    const categories = await prisma.category.findMany();
-
-    // ✅ Create new classes from matkuls
-    const matakuliahs = [];
-    for (let i = 0; i < matkuls.length; i++) {
-        const matkul = matkuls[i];
-        const assignedCategory = categories.length > 0
-            ? categories[i % categories.length]
-            : null;
-
-        const newClass = await prisma.class.create({
-            data: {
-                name: matkul,
-                description: randWord({ length: 30 }).join(" "),
-                image_path: "files/public/placeholder.png",
-                categoryId: assignedCategory ? assignedCategory.id : null,
-            },
-        });
-        matakuliahs.push(newClass);
-    }
-
-    const testTeacher = await prisma.user.findFirst({
-        where: { username: "teachertestacc" },
-    });
-
-    if (testTeacher) {
-        for (const matkul of matakuliahs) {
-            const shuffledStudents = [...students].sort(() => 0.5 - Math.random());
-            const selectedStudents = shuffledStudents.slice(0, 10);
-
-            await prisma.user_Class.create({
-                data: {
-                    userId: testTeacher.id,
-                    classId: matkul.id,
-                    role: class_role.Teacher,
-                },
-            });
-
-            for (const stu of selectedStudents) {
-                await prisma.user_Class.create({
-                    data: {
-                        userId: stu.id,
-                        classId: matkul.id,
-                        role: class_role.Student,
-                    },
-                });
-            }
-        }
-    }
-
-    console.log("✅ user_classes seeded.");
+    console.log(`✅ user_classes seeded: ${teachers.length} Guru dan ${students.length} Siswa terdaftar di ${classes.length} Kelas.`);
 };

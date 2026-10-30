@@ -105,5 +105,46 @@ export const workshopsSeed = async () => {
         }
     }
 
-    console.log("✅ Workshops seeded.");
+    // Daftarkan siswa demo ke workshop terbuka
+    const siswaDemo = await prisma.user.findFirst({ where: { username: "siswa_demo" } });
+    const annisa = await prisma.user.findFirst({ where: { username: "annisa" } });
+
+    const openWorkshops = await prisma.workshop.findMany({ where: { quota: { gt: 1 } } });
+    if (siswaDemo && openWorkshops.length > 0) {
+        await prisma.workshopParticipant.upsert({
+            where: {
+                workshopId_userId: {
+                    workshopId: openWorkshops[0].id,
+                    userId: siswaDemo.id,
+                },
+            },
+            update: { status: "Terdaftar" },
+            create: {
+                workshopId: openWorkshops[0].id,
+                userId: siswaDemo.id,
+                status: "Terdaftar",
+                notes: "Siswa aktif eksplorasi lapangan",
+            },
+        });
+    }
+
+    if (annisa && openWorkshops.length > 1) {
+        await prisma.workshopParticipant.upsert({
+            where: {
+                workshopId_userId: {
+                    workshopId: openWorkshops[1].id,
+                    userId: annisa.id,
+                },
+            },
+            update: { status: "Terdaftar" },
+            create: {
+                workshopId: openWorkshops[1].id,
+                userId: annisa.id,
+                status: "Terdaftar",
+                notes: "Minat permakultur mandiri",
+            },
+        });
+    }
+
+    console.log("✅ Workshops seeded (termasuk peserta siswa demo).");
 };

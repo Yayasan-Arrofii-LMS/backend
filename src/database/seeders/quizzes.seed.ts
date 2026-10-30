@@ -8,33 +8,52 @@ export const quizzesSeed = async () => {
     }
 
     let createdCount = 0;
+    const now = new Date();
+    const openAt = new Date(now.getTime() - 24 * 60 * 60 * 1000); // dibuka kemarin
+    const closeAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // ditutup 14 hari lagi
 
     for (let idx = 0; idx < sections.length; idx++) {
         const section = sections[idx];
-        // Ensure first section always gets a quiz, and 40% chance for others
-        const flag = idx === 0 || Math.random() < 0.4;
-        if (!flag) {
-            continue;
-        }
-        const now = new Date();
-        const openAt = new Date(now.getTime() - 24 * 60 * 60 * 1000); // opened yesterday
-        const closeAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // closes in 7 days
+        const title = `Kuis Evaluasi: ${section.title}`;
 
-        await prisma.quiz.create({
-            data: {
-                title: `Quiz Adaptif: ${section.title}`,
-                description: `Kuis adaptif untuk menguji penguasaan materi pada bagian ${section.title}.`,
-                xp: Math.floor(Math.random() * 51) + 50, // XP between 50 and 100
-                max_attempts: Math.floor(Math.random() * 3) + 1, // 1-3 attempts
-                time_limit: (Math.floor(Math.random() * 4) + 1) * 15, // 15, 30, 45, 60 minutes
-                open_at: openAt,
-                close_at: closeAt,
+        const existing = await prisma.quiz.findFirst({
+            where: {
                 sectionId: section.id,
-                passing_grade: 70,
-                show_review: true,
+                title,
             },
         });
-        createdCount++;
+
+        if (existing) {
+            await prisma.quiz.update({
+                where: { id: existing.id },
+                data: {
+                    description: `Kuis adaptif bertingkat untuk menguji penguasaan materi pada bab "${section.title}".`,
+                    xp: 50,
+                    max_attempts: 3,
+                    time_limit: 30,
+                    open_at: openAt,
+                    close_at: closeAt,
+                    passing_grade: 70,
+                    show_review: true,
+                },
+            });
+        } else {
+            await prisma.quiz.create({
+                data: {
+                    title,
+                    description: `Kuis adaptif bertingkat untuk menguji penguasaan materi pada bab "${section.title}".`,
+                    xp: 50,
+                    max_attempts: 3,
+                    time_limit: 30,
+                    open_at: openAt,
+                    close_at: closeAt,
+                    sectionId: section.id,
+                    passing_grade: 70,
+                    show_review: true,
+                },
+            });
+            createdCount++;
+        }
     }
-    console.log(`✅ Quizzes seeded (${createdCount} quizzes).`);
+    console.log(`✅ Quizzes seeded: Kuis adaptif tersedia di setiap bab materi.`);
 };

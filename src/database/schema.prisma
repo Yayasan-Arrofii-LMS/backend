@@ -42,6 +42,12 @@ enum otp_type {
   EmailVerification
 }
 
+enum recommendation_feedback {
+  relevant
+  neutral
+  not_relevant
+}
+
 model Role {
   id        Int      @id @default(autoincrement())
   name      String   @unique
@@ -51,29 +57,30 @@ model Role {
 }
 
 model User {
-  id                     String                @id @default(uuid())
-  email                  String                @unique
-  username               String                @unique
-  name                   String
-  password               String
-  profileImage           String
-  verified_at            DateTime?
-  createdAt              DateTime              @default(now())
-  updatedAt              DateTime              @updatedAt
-  role                   Role                  @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  roleId                 Int
-  xps                    Xp[]
-  User_Class             User_Class[]
-  User_Material          User_Material[]
-  user_assignment        User_Assignment[]
-  quiz_attempt           Quiz_Attempt[]
-  token                  Reset_Token[]
-  OTP                    OTP_Token[]
-  FileToken              FileToken[]
-  interests              UserInterest[]
-  activities             MaterialActivity[]
-  workshopsInstructed    Workshop[]            @relation("WorkshopInstructor")
-  workshopParticipations WorkshopParticipant[]
+  id                       String                   @id @default(uuid())
+  email                    String                   @unique
+  username                 String                   @unique
+  name                     String
+  password                 String
+  profileImage             String
+  verified_at              DateTime?
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  role                     Role                     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  roleId                   Int
+  xps                      Xp[]
+  User_Class               User_Class[]
+  User_Material            User_Material[]
+  user_assignment          User_Assignment[]
+  quiz_attempt             Quiz_Attempt[]
+  token                    Reset_Token[]
+  OTP                      OTP_Token[]
+  FileToken                FileToken[]
+  interests                UserInterest[]
+  activities               MaterialActivity[]
+  recommendation_histories Recommendation_History[]
+  workshopsInstructed      Workshop[]               @relation("WorkshopInstructor")
+  workshopParticipations   WorkshopParticipant[]
 }
 
 model Xp {
@@ -150,23 +157,25 @@ model UserInterest {
 }
 
 model Material {
-  id            Int                @id @default(autoincrement())
-  title         String
-  content       String             @db.LongText
-  xp            Int                @default(10)
-  video_link    String?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  sectionId     Int
-  order         Int
-  categoryId    Int?
-  category      Category?          @relation(fields: [categoryId], references: [id])
-  difficulty    String?
-  mediaType     String?
-  Section       Section            @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  Material_File Material_File[]
-  User_Material User_Material[]
-  activities    MaterialActivity[]
+  id                       Int                      @id @default(autoincrement())
+  title                    String
+  content                  String                   @db.LongText
+  xp                       Int                      @default(10)
+  video_link               String?
+  duration_minutes         Int?
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  sectionId                Int
+  order                    Int
+  categoryId               Int?
+  category                 Category?                @relation(fields: [categoryId], references: [id])
+  difficulty               String?
+  mediaType                String?
+  Section                  Section                  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  Material_File            Material_File[]
+  User_Material            User_Material[]
+  activities               MaterialActivity[]
+  recommendation_histories Recommendation_History[]
 }
 
 model MaterialActivity {
@@ -402,4 +411,26 @@ model WorkshopParticipant {
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([workshopId, userId])
+}
+
+model Recommendation_History {
+  id                   Int                      @id @default(autoincrement())
+  userId               String
+  materialId           Int
+  primary_reason       String
+  reasons              Json
+  reason_text          String                   @db.Text
+  score                Int                      @default(0)
+  feedback             recommendation_feedback?
+  feedback_at          DateTime?
+  first_recommended_at DateTime                 @default(now())
+  last_recommended_at  DateTime                 @default(now())
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  user                 User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  material             Material                 @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, materialId])
+  @@index([userId, last_recommended_at])
+  @@index([userId, primary_reason])
 }

@@ -70,11 +70,12 @@ export class MaterialController {
                 data: material,
             });
         } catch (error) {
+            const statusCode = error instanceof NotFoundError ? 404 : 500;
             return sendResponse({
                 res,
-                statusCode: 500,
+                statusCode,
                 success: false,
-                message: 'Failed to create material',
+                message: error instanceof NotFoundError ? error.message : 'Failed to create material',
                 data: null,
                 errors: { global: [(error as Error).message] },
             });
@@ -108,7 +109,7 @@ export class MaterialController {
     async deleteMaterial(req: Request, res: Response) {
         try {
             const id = parseInt(req.params.materialId);
-            const material = await materialService.deleteMaterial(id);
+            await materialService.deleteMaterial(id);
             return sendResponse({
                 res,
                 statusCode: 200,
@@ -123,6 +124,51 @@ export class MaterialController {
                 statusCode,
                 success: false,
                 message: error instanceof NotFoundError ? error.message : 'Failed to delete material',
+                data: null,
+                errors: { global: [(error as Error).message] },
+            });
+        }
+    }
+
+    async completeMaterial(req: Request, res: Response) {
+        try {
+            const userId = req.user?.id;
+            if (!userId) {
+                return sendResponse({
+                    res,
+                    statusCode: 401,
+                    success: false,
+                    message: 'User not authenticated',
+                    data: null,
+                });
+            }
+
+            const materialId = parseInt(req.params.materialId);
+            if (isNaN(materialId)) {
+                return sendResponse({
+                    res,
+                    statusCode: 400,
+                    success: false,
+                    message: 'Invalid material ID',
+                    data: null,
+                });
+            }
+
+            const result = await materialService.completeMaterial(userId, materialId);
+            return sendResponse({
+                res,
+                statusCode: 200,
+                success: true,
+                message: 'Material marked as completed',
+                data: result,
+            });
+        } catch (error) {
+            const statusCode = error instanceof NotFoundError ? 404 : 500;
+            return sendResponse({
+                res,
+                statusCode,
+                success: false,
+                message: error instanceof NotFoundError ? error.message : 'Failed to complete material',
                 data: null,
                 errors: { global: [(error as Error).message] },
             });

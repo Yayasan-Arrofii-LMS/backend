@@ -3,48 +3,53 @@ import { randomInt } from "crypto";
 
 export const quiz_answersSeed = async () => {
     console.log("\n🌱 Seeding quiz answers...");
-    const questions = await prisma.quiz_Question.findMany();
+    const questions = await prisma.quiz_Question.findMany({
+        include: { quiz_answer: true },
+    });
 
     if (questions.length === 0) {
         throw new Error("Quiz questions must be seeded before seeding quiz answers.");
     }
 
     for (const question of questions) {
-        if (question.type === "MultipleChoice") {
-            const numChoices = 4;
-            const correctIndex = randomInt(0, numChoices);
+        if (question.quiz_answer.length > 0) {
+            continue; // Sudah memiliki pilihan jawaban
+        }
 
-            for (let i = 0; i < numChoices; i++) {
+        if (question.type === "MultipleChoice") {
+            const choices = [
+                { answer: "Sangat benar dan selaras dengan prinsip keseimbangan alam", is_correct: true },
+                { answer: "Kurang tepat karena mengabaikan siklus rantai makanan", is_correct: false },
+                { answer: "Hanya berlaku untuk ekosistem buatan manusia", is_correct: false },
+                { answer: "Berdampak negatif terhadap keanekaragaman hayati", is_correct: false },
+            ];
+
+            for (const choice of choices) {
                 await prisma.quiz_Answer.create({
                     data: {
-                        answer: `Choice ${i + 1} for question ${question.id}`,
-                        is_correct: i === correctIndex,
-                        questionId: question.id
-                    }
+                        answer: choice.answer,
+                        is_correct: choice.is_correct,
+                        questionId: question.id,
+                    },
                 });
             }
         } else if (question.type === "TrueFalse") {
-            const isTrueCorrect = randomInt(0, 2) === 0;
-
             await prisma.quiz_Answer.create({
                 data: {
-                    answer: "True",
-                    is_correct: isTrueCorrect,
-                    questionId: question.id
-                }
+                    answer: "Benar",
+                    is_correct: true,
+                    questionId: question.id,
+                },
             });
             await prisma.quiz_Answer.create({
                 data: {
-                    answer: "False",
-                    is_correct: !isTrueCorrect,
-                    questionId: question.id
-                }
+                    answer: "Salah",
+                    is_correct: false,
+                    questionId: question.id,
+                },
             });
-        } else if (question.type === "Essay") {
-            // Essay questions typically don't have predefined answers
-            continue;
         }
     }
 
-    console.log("✅ Quiz answers seeded.");
-}
+    console.log("✅ Quiz answers seeded dengan opsi jawaban natural dan idempoten.");
+};

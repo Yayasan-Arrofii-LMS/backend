@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { sendResponse } from '../helpers/baseResponse';
 import { NotFoundError } from '../errors/notfound.error';
 import materialMetadataService from '../services/materialMetadata.service';
+import materialService from '../services/material.service';
 
 export class MaterialMetadataController {
     async updateMaterialMetadata(req: Request, res: Response) {
@@ -54,6 +55,51 @@ export class MaterialMetadataController {
                 statusCode: 500,
                 success: false,
                 message: 'Failed to retrieve materials',
+                data: null,
+                errors: { global: [(error as Error).message] },
+            });
+        }
+    }
+
+    async completeMaterial(req: Request, res: Response) {
+        try {
+            const userId = req.user?.id;
+            if (!userId) {
+                return sendResponse({
+                    res,
+                    statusCode: 401,
+                    success: false,
+                    message: 'User not authenticated',
+                    data: null,
+                });
+            }
+
+            const materialId = parseInt(req.params.materialId);
+            if (isNaN(materialId)) {
+                return sendResponse({
+                    res,
+                    statusCode: 400,
+                    success: false,
+                    message: 'Invalid material ID',
+                    data: null,
+                });
+            }
+
+            const result = await materialService.completeMaterial(userId, materialId);
+            return sendResponse({
+                res,
+                statusCode: 200,
+                success: true,
+                message: 'Material marked as completed',
+                data: result,
+            });
+        } catch (error) {
+            const statusCode = error instanceof NotFoundError ? 404 : 500;
+            return sendResponse({
+                res,
+                statusCode,
+                success: false,
+                message: error instanceof NotFoundError ? error.message : 'Failed to complete material',
                 data: null,
                 errors: { global: [(error as Error).message] },
             });
