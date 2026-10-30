@@ -2,55 +2,66 @@ import { quiz_question_type } from "@prisma/client";
 import prisma from "..";
 
 export const attemp_answersSeed = async () => {
-    console.log("\n🌱 Seeding attempt answers...");
+    console.log("\n🌱 Seeding attempt answers (jawaban detail kuis siswa)...");
 
     const attempts = await prisma.quiz_Attempt.findMany();
-    const questions = await prisma.quiz_Question.findMany({ include: { quiz_answer: true } });
     if (attempts.length === 0) {
         throw new Error("Quiz attempts must be seeded before seeding attempt answers.");
     }
 
-    if (questions.length === 0) {
-        throw new Error("Quiz questions must be seeded before seeding attempt answers.");
-    }
-
     for (const attempt of attempts) {
-        for (const question of questions) {
-            const flag = Math.random() < 0.7; // 70% chance to answer each question
-            if (!flag) {
-                continue;
-            }
+        // Ambil HANYA pertanyaan yang sesuai dengan kuis yang dikerjakan
+        const questions = await prisma.quiz_Question.findMany({
+            where: { quizId: attempt.quizId },
+            include: { quiz_answer: true },
+        });
 
-            let answer;
+        for (let order = 0; order < questions.length; order++) {
+            const question = questions[order];
+            const isPassing = (attempt.score ?? 0) >= 70;
+            // Jika nilai lulus, mayoritas benar; jika nilai remedial, beberapa dibuat salah
+            const shouldBeCorrect = isPassing ? (order !== 0) : (order % 2 === 0);
+
+            let answerText: string | null = null;
+            let isCorrect = shouldBeCorrect;
+
             if (question.type === quiz_question_type.MultipleChoice) {
-
-                const choices = question.quiz_answer;
-                if (choices.length > 0) {
-                    const randomChoice = choices[Math.floor(Math.random() * choices.length)];
-                    answer = randomChoice.answer;
-                } else {
-                    answer = null;
-                }
-
+                const targetChoice = question.quiz_answer.find((a) => a.is_correct === shouldBeCorrect)
+                    ?? question.quiz_answer[0];
+                answerText = targetChoice ? targetChoice.answer : "Jawaban pilihan";
+                isCorrect = targetChoice ? targetChoice.is_correct : false;
             } else if (question.type === quiz_question_type.TrueFalse) {
-                answer = Math.random() < 0.5 ? "True" : "False";
-            } else if (question.type === quiz_question_type.Essay) {
-                answer = "This is a sample short answer.";
+                answerText = shouldBeCorrect ? "Benar" : "Salah";
+                isCorrect = shouldBeCorrect;
             } else {
-                answer = null;
+                answerText = "Penjelasan singkat pemahaman materi.";
+                isCorrect = true;
             }
 
-            await prisma.attemp_Answer.create({
-                data: {
+            await prisma.attemp_Answer.upsert({
+                where: {
+                    attemptId_questionId: {
+                        attemptId: attempt.id,
+                        questionId: question.id,
+                    },
+                },
+                update: {
+                    answer: answerText,
+                    order: order + 1,
+                    is_correct: isCorrect,
+                    answered_at: attempt.submitted_at ?? new Date(),
+                },
+                create: {
                     attemptId: attempt.id,
                     questionId: question.id,
-                    answer: answer
-                }
+                    answer: answerText,
+                    order: order + 1,
+                    is_correct: isCorrect,
+                    answered_at: attempt.submitted_at ?? new Date(),
+                },
             });
         }
     }
 
-    // TODO : Add update score in quiz_Attempt based on correct answers
-
-    console.log("✅ Attempt answers seeded.");
-}
+    console.log("✅ Attempt answers seeded: Jawaban tersinkronisasi tepat dengan soal kuis masing-masing.");
+};

@@ -25,19 +25,29 @@ export const quiz_questionsSeed = async () => {
 
     for (const quiz of quizzes) {
         for (const item of DIFFICULTY_PLAN) {
-            await prisma.quiz_Question.create({
-                data: {
+            const questionText = `[${item.label}] Pertanyaan pemahaman materi: ${quiz.title}?`;
+            const existing = await prisma.quiz_Question.findFirst({
+                where: {
                     quizId: quiz.id,
-                    question: `[${item.label}] Pertanyaan tentang ${quiz.title}?`,
-                    type: item.type,
-                    points: 1,
-                    difficulty: item.difficulty,
-                    difficulty_rating: getDifficultyRating(item.difficulty),
-                    explanation: `Pembahasan untuk soal tingkat ${item.difficulty} pada ${quiz.title}.`,
+                    question: questionText,
                 },
             });
+
+            if (!existing) {
+                await prisma.quiz_Question.create({
+                    data: {
+                        quizId: quiz.id,
+                        question: questionText,
+                        type: item.type,
+                        points: 1,
+                        difficulty: item.difficulty,
+                        difficulty_rating: getDifficultyRating(item.difficulty),
+                        explanation: `Pembahasan lengkap konsep untuk tingkat kesulitan ${item.difficulty} pada ${quiz.title}.`,
+                    },
+                });
+            }
         }
     }
 
-    console.log("✅ Quiz questions seeded across 3 difficulty levels.");
+    console.log("✅ Quiz questions seeded across 3 difficulty levels (idempotent).");
 };
