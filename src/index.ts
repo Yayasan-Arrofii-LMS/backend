@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import router from "./api/v1/routes/index.route";
 import cors from "cors";
@@ -8,15 +9,22 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true, limit: "500mb" }));
 
-const allowedOrigins = [
+const defaultOrigins = [
     "http://localhost:3000",
-    'https://toronto-guild-enters-finder.trycloudflare.com'
+    "http://localhost:5173",
+    "https://toronto-guild-enters-finder.trycloudflare.com"
 ];
+
+const envOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
+    : [];
+
+const allowedOrigins = [...defaultOrigins, ...envOrigins];
 
 app.use(
     cors({
         origin: (origin, callback) => {
-            if (!origin || allowedOrigins.includes(origin)) {
+            if (!origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
                 callback(null, true);
             } else {
                 callback(new Error("Not allowed by CORS ❌"));

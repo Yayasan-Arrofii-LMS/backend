@@ -8,8 +8,9 @@
   },
   "scripts": {
     "dev": "nodemon --watch src --exec ts-node src/server.ts",
-    "build": "tsc",
+    "build": "prisma generate && tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
+    "start:deploy": "prisma migrate deploy && node dist/server.js",
     "test": "jest --watch --detectOpenHandles",
     "test:unit": "NODE_ENV=test jest --runInBand tests/unit",
     "test:feature": "NODE_ENV=test jest --runInBand tests/feature",
