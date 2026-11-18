@@ -24,7 +24,10 @@ export const getClasses = async (req: Request, res: Response) => {
         const page = parseInt(req.query.page as string) || 1;
         const limit = 12;
         const search = (req.query.search as string) || undefined;
-        const categoryId = req.query.category ? parseInt(req.query.category as string) || undefined : undefined;
+        const rawCat = (req.query.category ?? req.query.categoryId) as string | undefined;
+        const categoryId = rawCat && rawCat.trim() !== "" && rawCat.trim() !== "Semua"
+            ? (!Number.isNaN(Number(rawCat.trim())) ? Number(rawCat.trim()) : rawCat.trim())
+            : undefined;
         const userId = req.user!.id!;
         const userRole = req.role!;
 

@@ -11,8 +11,26 @@ export const safeClassFields = {
 };
 
 class ClassRepository {
-    async getCount(userId?: string, search?: string, categoryId?: number) {
-        const cat = categoryId ? { categoryId } : {};
+    private buildCategoryWhere(categoryId?: number | string) {
+        if (categoryId === undefined || categoryId === null || categoryId === "" || categoryId === "Semua") {
+            return {};
+        }
+        if (typeof categoryId === "number") {
+            return { categoryId };
+        }
+        const trimmed = categoryId.trim();
+        if (!trimmed || trimmed === "Semua") {
+            return {};
+        }
+        const num = Number(trimmed);
+        if (!Number.isNaN(num)) {
+            return { categoryId: num };
+        }
+        return { category: { name: trimmed } };
+    }
+
+    async getCount(userId?: string, search?: string, categoryId?: number | string) {
+        const cat = this.buildCategoryWhere(categoryId);
         const q = search ? { OR: [{ name: { contains: search } }, { description: { contains: search } }] } : {};
         if (!userId) {
             return await prisma.class.count({ where: { ...cat, ...q } });
@@ -81,10 +99,10 @@ class ClassRepository {
             category: (classData as any).category ?? null,
             teachers,
         };
-    } async getClasses(skip: number = 0, take: number = 10, search?: string, userId?: string, categoryId?: number) {
+    } async getClasses(skip: number = 0, take: number = 10, search?: string, userId?: string, categoryId?: number | string) {
         let classes;
 
-        const cat = categoryId ? { categoryId } : {};
+        const cat = this.buildCategoryWhere(categoryId);
         const q = search ? {
             OR: [
                 {

@@ -17,7 +17,7 @@ class ClassService {
         return await classRepository.getCount();
     }
 
-    async getClasses(userId: string, userRole: string | undefined, page: number, limit: number, search?: string, categoryId?: number) {
+    async getClasses(userId: string, userRole: string | undefined, page: number, limit: number, search?: string, categoryId?: number | string) {
         const skip = (page - 1) * limit;
 
         // Admin can see all classes
@@ -89,7 +89,7 @@ class ClassService {
         return await classRepository.getStudentsInClass(classId);
     }
 
-    async getAllClasses(data: { search?: string; limit?: number; page?: number; categoryId?: number }) {
+    async getAllClasses(data: { search?: string; limit?: number; page?: number; categoryId?: number | string }) {
         const { search, limit = 12, page = 1, categoryId } = data;
         const skip = (page - 1) * limit;
         const classes = await classRepository.getClasses(skip, limit, search, undefined, categoryId);
