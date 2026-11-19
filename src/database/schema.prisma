@@ -25,6 +25,23 @@ enum class_role {
   Admin
 }
 
+enum RegistrationType {
+  AUTO
+  MANUAL
+}
+
+enum EnrollmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum class_approval_status {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum quiz_question_type {
   MultipleChoice
   TrueFalse
@@ -81,6 +98,7 @@ model User {
   recommendation_histories Recommendation_History[]
   workshopsInstructed      Workshop[]               @relation("WorkshopInstructor")
   workshopParticipations   WorkshopParticipant[]
+  approvedClasses          Class[]                  @relation("ClassApprover")
 }
 
 model Xp {
@@ -95,27 +113,34 @@ model Xp {
 }
 
 model Class {
-  id          Int          @id @default(autoincrement())
-  name        String
-  description String       @db.LongText
-  image_path  String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  categoryId  Int?
-  category    Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  User_Class  User_Class[]
-  Section     Section[]
+  id               Int                   @id @default(autoincrement())
+  name             String
+  description      String                @db.LongText
+  image_path       String
+  registrationType RegistrationType      @default(AUTO)
+  approvalStatus   class_approval_status @default(APPROVED)
+  rejectionReason  String?               @db.Text
+  approvedById     String?
+  approvedAt       DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  categoryId       Int?
+  category         Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  approver         User?                 @relation("ClassApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  User_Class       User_Class[]
+  Section          Section[]
 }
 
 model User_Class {
-  id        Int        @id @default(autoincrement())
+  id        Int              @id @default(autoincrement())
   role      class_role
+  status    EnrollmentStatus @default(APPROVED)
   userId    String
   classId   Int
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  class     Class      @relation(fields: [classId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class     Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
 
   @@unique([userId, classId])
 }

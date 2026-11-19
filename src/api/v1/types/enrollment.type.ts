@@ -5,3 +5,7 @@ export type EnrollClassInput = {
 export type UnenrollClassInput = {
     classId: number;
 };
+
+export type UpdateApplicantStatusInput = {
+    status: "APPROVED" | "REJECTED";
+};

@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { class_approval_status } from "@prisma/client";
 import classService from "../services/class.service";
 import { BaseResponse } from "../types/responseType";
 import { sendResponse } from "../helpers/baseResponse";
@@ -12,6 +13,11 @@ interface ClassDto {
     name: string;
     description: string;
     image_path: string;
+    registrationType?: string;
+    approvalStatus?: string;
+    rejectionReason?: string | null;
+    approvedById?: string | null;
+    approvedAt?: Date | string | null;
     createdAt: string;
     updatedAt: string;
 }
@@ -31,7 +37,23 @@ export const getClasses = async (req: Request, res: Response) => {
         const userId = req.user!.id!;
         const userRole = req.role!;
 
-        const { classes, totalItems } = await classService.getClasses(userId, userRole, page, limit, search, categoryId);
+        const rawApproval = (req.query.approvalStatus as string | undefined)?.toUpperCase();
+        const approvalStatus =
+            rawApproval === class_approval_status.PENDING ||
+            rawApproval === class_approval_status.APPROVED ||
+            rawApproval === class_approval_status.REJECTED
+                ? (rawApproval as class_approval_status)
+                : undefined;
+
+        const { classes, totalItems } = await classService.getClasses(
+            userId,
+            userRole,
+            page,
+            limit,
+            search,
+            categoryId,
+            approvalStatus
+        );
         const meta = {
             totalItems: totalItems,
             currentPage: page,
@@ -47,6 +69,12 @@ export const getClasses = async (req: Request, res: Response) => {
             image_path_relative: cls.image_path_relative,
             categoryId: (cls as any).categoryId ?? null,
             category: (cls as any).category ?? null,
+            registrationType: (cls as any).registrationType ?? "AUTO",
+            approvalStatus: (cls as any).approvalStatus ?? "APPROVED",
+            rejectionReason: (cls as any).rejectionReason ?? null,
+            approvedById: (cls as any).approvedById ?? null,
+            approvedAt: (cls as any).approvedAt ?? null,
+            teachers: (cls as any).teachers ?? [],
         }))
 
         sendResponse({ res, statusCode: 200, success: true, message: "Get Classes", data: data, meta: meta })
@@ -98,6 +126,12 @@ export const getClassById = async (req: Request, res: Response) => {
             image_path_relative: classData.image_path_relative,
             categoryId: (classData as any).categoryId ?? null,
             category: (classData as any).category ?? null,
+            registrationType: classData.registrationType ?? "AUTO",
+            approvalStatus: classData.approvalStatus ?? "APPROVED",
+            rejectionReason: classData.rejectionReason ?? null,
+            approvedById: classData.approvedById ?? null,
+            approvedAt: classData.approvedAt ?? null,
+            approver: classData.approver ?? null,
             teachers: classData.teachers,
             students: studentsInClass
         }
@@ -115,7 +149,7 @@ export const getClassById = async (req: Request, res: Response) => {
 
 export const createClass = async (req: Request, res: Response) => {
     try {
-        const { name, description, categoryId } = req.body;
+        const { name, description, categoryId, registrationType } = req.body;
         if (!name || !description) {
             return res.status(400).json({
                 success: false,
@@ -138,7 +172,11 @@ export const createClass = async (req: Request, res: Response) => {
             uploadPath = await saveFile(file);
         }
 
-        const createdClass = await classService.createClass(userId!, { name, description, image_path: uploadPath, categoryId: categoryId ?? null });
+        const createdClass = await classService.createClass(
+            userId!,
+            { name, description, image_path: uploadPath, categoryId: categoryId ?? null, registrationType },
+            req.role
+        );
 
         const response: BaseResponse<Partial<ClassDto> & { image_path_relative?: string }> = {
             success: true,
@@ -148,7 +186,12 @@ export const createClass = async (req: Request, res: Response) => {
                 name: createdClass.name,
                 description: createdClass.description,
                 image_path: createdClass.image_path,
-                image_path_relative: createdClass.image_path_relative
+                image_path_relative: createdClass.image_path_relative,
+                registrationType: createdClass.registrationType,
+                approvalStatus: createdClass.approvalStatus,
+                rejectionReason: createdClass.rejectionReason,
+                approvedById: createdClass.approvedById,
+                approvedAt: createdClass.approvedAt,
             },
         };
 
@@ -168,7 +211,7 @@ export const updateClass = async (req: Request, res: Response) => {
         const classId = parseInt(req.params.id);
         const userId = req.user!.id!;
         const userRole = req.role;
-        const { name, description, categoryId } = req.body;
+        const { name, description, categoryId, registrationType } = req.body;
 
         // Check if class exists
         const classData = await classService.getClassById(classId);
@@ -202,7 +245,7 @@ export const updateClass = async (req: Request, res: Response) => {
             uploadPath = await saveFile(file);
         }
 
-        const updatedClass = await classService.updateClass(classId, { name, description, image_path: uploadPath, categoryId });
+        const updatedClass = await classService.updateClass(classId, { name, description, image_path: uploadPath, categoryId, registrationType });
 
         if (!updatedClass) {
             return res.status(404).json({
@@ -218,7 +261,12 @@ export const updateClass = async (req: Request, res: Response) => {
                 id: updatedClass.id,
                 name: updatedClass.name,
                 description: updatedClass.description,
-                image_path: updatedClass.image_path
+                image_path: updatedClass.image_path,
+                registrationType: updatedClass.registrationType,
+                approvalStatus: updatedClass.approvalStatus,
+                rejectionReason: updatedClass.rejectionReason,
+                approvedById: updatedClass.approvedById,
+                approvedAt: updatedClass.approvedAt,
             },
         };
 
@@ -276,6 +324,131 @@ export const deleteClass = async (req: Request, res: Response) => {
             success: false,
             message: "Internal server error",
             errors: { server: (error as Error).message },
+        });
+    }
+};
+
+export const getPendingClasses = async (req: Request, res: Response) => {
+    try {
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 12;
+        const search = (req.query.search as string) || undefined;
+
+        const { classes, totalItems } = await classService.getPendingClasses(page, limit, search);
+        const meta = {
+            totalItems,
+            currentPage: page,
+            totalPages: Math.ceil(totalItems / limit),
+            itemsPerPage: limit,
+        };
+
+        return sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: "Pending classes retrieved successfully",
+            data: classes,
+            meta,
+        });
+    } catch (error) {
+        return sendResponse({
+            res,
+            statusCode: 500,
+            success: false,
+            message: "Failed to retrieve pending classes",
+            data: null,
+            errors: { server: [(error as Error).message] },
+        });
+    }
+};
+
+export const approveClass = async (req: Request, res: Response) => {
+    try {
+        const classId = parseInt(req.params.id);
+        if (isNaN(classId)) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: "Invalid class ID",
+                data: null,
+            });
+        }
+
+        const adminId = req.user!.id!;
+        const approved = await classService.approveClass(adminId, classId);
+
+        if (!approved) {
+            return sendResponse({
+                res,
+                statusCode: 404,
+                success: false,
+                message: "Class not found",
+                data: null,
+            });
+        }
+
+        return sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: "Kelas berhasil disetujui",
+            data: approved,
+        });
+    } catch (error) {
+        return sendResponse({
+            res,
+            statusCode: 500,
+            success: false,
+            message: "Failed to approve class",
+            data: null,
+            errors: { server: [(error as Error).message] },
+        });
+    }
+};
+
+export const rejectClass = async (req: Request, res: Response) => {
+    try {
+        const classId = parseInt(req.params.id);
+        if (isNaN(classId)) {
+            return sendResponse({
+                res,
+                statusCode: 400,
+                success: false,
+                message: "Invalid class ID",
+                data: null,
+            });
+        }
+
+        const adminId = req.user!.id!;
+        const { rejectionReason } = req.body ?? {};
+        const rejected = await classService.rejectClass(adminId, classId, rejectionReason);
+
+        if (!rejected) {
+            return sendResponse({
+                res,
+                statusCode: 404,
+                success: false,
+                message: "Class not found",
+                data: null,
+            });
+        }
+
+        return sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: "Kelas berhasil ditolak",
+            data: rejected,
+        });
+    } catch (error) {
+        return sendResponse({
+            res,
+            statusCode: 500,
+            success: false,
+            message: "Failed to reject class",
+            data: null,
+            errors: { server: [(error as Error).message] },
         });
     }
 };

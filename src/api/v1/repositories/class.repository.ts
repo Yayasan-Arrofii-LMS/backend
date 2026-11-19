@@ -1,4 +1,4 @@
-import { class_role } from "@prisma/client";
+import { class_approval_status, class_role, EnrollmentStatus, RegistrationType } from "@prisma/client";
 import prisma from "../../../database";
 import { safeUserFields } from "./user.repository";
 
@@ -8,6 +8,11 @@ export const safeClassFields = {
     description: true,
     image_path: true,
     categoryId: true,
+    registrationType: true,
+    approvalStatus: true,
+    rejectionReason: true,
+    approvedById: true,
+    approvedAt: true,
 };
 
 class ClassRepository {
@@ -29,28 +34,48 @@ class ClassRepository {
         return { category: { name: trimmed } };
     }
 
-    async getCount(userId?: string, search?: string, categoryId?: number | string) {
+    async getCount(
+        userId?: string,
+        search?: string,
+        categoryId?: number | string,
+        approvalStatus?: class_approval_status
+    ) {
         const cat = this.buildCategoryWhere(categoryId);
         const q = search ? { OR: [{ name: { contains: search } }, { description: { contains: search } }] } : {};
+        const approval = approvalStatus ? { approvalStatus } : {};
         if (!userId) {
-            return await prisma.class.count({ where: { ...cat, ...q } });
+            return await prisma.class.count({ where: { ...cat, ...q, ...approval } });
         }
         return await prisma.class.count({
             where: {
                 ...cat,
                 ...q,
-                User_Class: { some: { userId: userId } },
+                ...approval,
+                User_Class: { some: { userId: userId, role: class_role.Teacher } },
             },
         });
     }
 
-    async createClass(name: string, description: string, image_path: string, categoryId?: number | null) {
+    async createClass(
+        name: string,
+        description: string,
+        image_path: string,
+        categoryId?: number | null,
+        registrationType?: RegistrationType,
+        approvalStatus: class_approval_status = class_approval_status.APPROVED,
+        approvedById?: string | null,
+        approvedAt?: Date | null
+    ) {
         const createdClass = await prisma.class.create({
             data: {
                 name,
                 description,
                 image_path: image_path,
                 categoryId: categoryId ?? null,
+                ...(registrationType ? { registrationType } : {}),
+                approvalStatus,
+                approvedById: approvedById ?? null,
+                approvedAt: approvedAt ?? null,
             },
             select: safeClassFields
         });
@@ -65,6 +90,7 @@ class ClassRepository {
             select: {
                 ...safeClassFields,
                 category: { select: { id: true, name: true } },
+                approver: { select: { id: true, name: true, email: true } },
                 User_Class: {
                     where: {
                         role: class_role.Teacher,
@@ -97,12 +123,28 @@ class ClassRepository {
             image_path_relative: imagePathRelative,
             categoryId: classData.categoryId,
             category: (classData as any).category ?? null,
+            registrationType: classData.registrationType,
+            approvalStatus: classData.approvalStatus,
+            rejectionReason: classData.rejectionReason,
+            approvedById: classData.approvedById,
+            approvedAt: classData.approvedAt,
+            approver: classData.approver ?? null,
             teachers,
         };
-    } async getClasses(skip: number = 0, take: number = 10, search?: string, userId?: string, categoryId?: number | string) {
+    }
+
+    async getClasses(
+        skip: number = 0,
+        take: number = 10,
+        search?: string,
+        userId?: string,
+        categoryId?: number | string,
+        approvalStatus?: class_approval_status
+    ) {
         let classes;
 
         const cat = this.buildCategoryWhere(categoryId);
+        const approval = approvalStatus ? { approvalStatus } : {};
         const q = search ? {
             OR: [
                 {
@@ -124,14 +166,24 @@ class ClassRepository {
                 orderBy: {
                     createdAt: "desc",
                 },
-                where: { ...cat, ...q },
-                select: { ...safeClassFields, category: { select: { id: true, name: true } } },
+                where: { ...cat, ...q, ...approval },
+                select: {
+                    ...safeClassFields,
+                    category: { select: { id: true, name: true } },
+                    User_Class: {
+                        where: { role: class_role.Teacher },
+                        select: {
+                            user: { select: { id: true, name: true, email: true } },
+                        },
+                    },
+                },
             });
         } else {
             classes = await prisma.class.findMany({
                 where: {
                     ...cat,
                     ...q,
+                    ...approval,
                     User_Class: {
                         some: {
                             userId: userId,
@@ -144,17 +196,28 @@ class ClassRepository {
                 orderBy: {
                     createdAt: "desc",
                 },
-                select: { ...safeClassFields, category: { select: { id: true, name: true } } },
+                select: {
+                    ...safeClassFields,
+                    category: { select: { id: true, name: true } },
+                    User_Class: {
+                        where: { role: class_role.Teacher },
+                        select: {
+                            user: { select: { id: true, name: true, email: true } },
+                        },
+                    },
+                },
             });
         }
         return classes.map((classData) => {
             const appUrl = (process.env.APP_URL || "http://localhost").replace(/\/$/, "");
             const imagePathRelative = `${appUrl}/${classData.image_path}`.replace(/\/$/, "");
+            const { User_Class, ...rest } = classData;
+            const teachers = User_Class.map((uc) => uc.user);
 
-            return { ...classData, image_path_relative: imagePathRelative };
+            return { ...rest, teachers, image_path_relative: imagePathRelative };
         });
     }
-    async updateClass(classId: number, data: { name?: string; description?: string, image_path?: string, categoryId?: number | null }) {
+    async updateClass(classId: number, data: { name?: string; description?: string, image_path?: string, categoryId?: number | null, registrationType?: RegistrationType }) {
         return await prisma.class.update({
             where: { id: classId },
             data,
@@ -167,13 +230,36 @@ class ClassRepository {
         });
     }
 
+    async updateApprovalStatus(
+        classId: number,
+        status: class_approval_status,
+        adminId: string,
+        reason?: string | null
+    ) {
+        return await prisma.class.update({
+            where: { id: classId },
+            data: {
+                approvalStatus: status,
+                rejectionReason: status === class_approval_status.REJECTED ? (reason ?? null) : null,
+                approvedById: adminId,
+                approvedAt: new Date(),
+            },
+            select: {
+                ...safeClassFields,
+                category: { select: { id: true, name: true } },
+                approver: { select: { id: true, name: true, email: true } },
+            },
+        });
+    }
+
     async getStudentsInClass(classId: number) {
         const students = await prisma.user.findMany({
             where: {
                 User_Class: {
                     some: {
                         classId: classId,
-                        role: class_role.Student
+                        role: class_role.Student,
+                        status: EnrollmentStatus.APPROVED,
                     },
                 }
             },

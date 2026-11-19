@@ -22,7 +22,7 @@ class PublicController {
     async getClassById(req: Request, res: Response) {
         const classId = req.params.id;
         const classData = await classService.getClassById(Number(classId));
-        if (!classData) {
+        if (!classData || classData.approvalStatus !== "APPROVED") {
             return sendResponse({ res, statusCode: 404, success: false, message: "Class not found", data: null });
         }
         const sections = await sectionService.getAllSectionsPublic(classId);

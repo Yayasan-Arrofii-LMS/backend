@@ -3,7 +3,11 @@ import { EnrollmentController } from '../controllers/enrollment.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { verifyRole } from '../middlewares/verifyrole.middleware';
 import { validateBody } from '../middlewares/schema.middleware';
-import { enrollClassSchema, unenrollClassSchema } from '../schemas/enrollment.schema';
+import {
+    enrollClassSchema,
+    unenrollClassSchema,
+    updateApplicantStatusSchema,
+} from '../schemas/enrollment.schema';
 
 const router = Router();
 
@@ -41,6 +45,25 @@ router.get(
     authMiddleware,
     verifyRole(['Student', 'Teacher']),
     EnrollmentController.checkEnrollment
+);
+
+// === TEACHER / ADMIN APPROVAL ===
+
+// Get list of applicants for a class
+router.get(
+    '/class/:classId/applicants',
+    authMiddleware,
+    verifyRole(['Teacher', 'Admin']),
+    EnrollmentController.getClassApplicants
+);
+
+// Approve or reject an applicant
+router.patch(
+    '/applicants/:userClassId/status',
+    authMiddleware,
+    verifyRole(['Teacher', 'Admin']),
+    validateBody(updateApplicantStatusSchema),
+    EnrollmentController.updateApplicantStatus
 );
 
 export default router;
