@@ -65,8 +65,23 @@ export const createWorkshop = async (req: Request, res: Response) => {
 
 export const updateWorkshop = async (req: Request, res: Response) => {
     try {
+        const workshopId = parseInt(req.params.id);
+        const existing = await workshopService.getWorkshopById(workshopId);
+        if (!existing) {
+            return sendResponse({ res, statusCode: 404, success: false, message: "Workshop tidak ditemukan", data: null });
+        }
+        if (req.role !== "Admin" && existing.instructorId !== req.user!.id) {
+            return sendResponse({
+                res,
+                statusCode: 403,
+                success: false,
+                message: "Anda tidak memiliki izin untuk mengelola workshop ini",
+                data: null,
+            });
+        }
+
         const uploadedPath = await resolveUploadedThumbnail(req);
-        const updated = await workshopService.updateWorkshop(parseInt(req.params.id), {
+        const updated = await workshopService.updateWorkshop(workshopId, {
             ...req.body,
             ...(uploadedPath ? { thumbnail: uploadedPath } : {}),
         });
@@ -81,7 +96,22 @@ export const updateWorkshop = async (req: Request, res: Response) => {
 
 export const deleteWorkshop = async (req: Request, res: Response) => {
     try {
-        const deleted = await workshopService.deleteWorkshop(parseInt(req.params.id));
+        const workshopId = parseInt(req.params.id);
+        const existing = await workshopService.getWorkshopById(workshopId);
+        if (!existing) {
+            return sendResponse({ res, statusCode: 404, success: false, message: "Workshop tidak ditemukan", data: null });
+        }
+        if (req.role !== "Admin" && existing.instructorId !== req.user!.id) {
+            return sendResponse({
+                res,
+                statusCode: 403,
+                success: false,
+                message: "Anda tidak memiliki izin untuk mengelola workshop ini",
+                data: null,
+            });
+        }
+
+        const deleted = await workshopService.deleteWorkshop(workshopId);
         if (!deleted) {
             return sendResponse({ res, statusCode: 404, success: false, message: "Workshop tidak ditemukan", data: null });
         }
@@ -117,7 +147,22 @@ export const cancelWorkshopRegistration = async (req: Request, res: Response) =>
 
 export const getWorkshopParticipants = async (req: Request, res: Response) => {
     try {
-        const participants = await workshopService.getParticipants(parseInt(req.params.id));
+        const workshopId = parseInt(req.params.id);
+        const existing = await workshopService.getWorkshopById(workshopId);
+        if (!existing) {
+            return sendResponse({ res, statusCode: 404, success: false, message: "Workshop tidak ditemukan", data: null });
+        }
+        if (req.role !== "Admin" && existing.instructorId !== req.user!.id) {
+            return sendResponse({
+                res,
+                statusCode: 403,
+                success: false,
+                message: "Anda tidak memiliki izin untuk mengelola workshop ini",
+                data: null,
+            });
+        }
+
+        const participants = await workshopService.getParticipants(workshopId);
         if (!participants) {
             return sendResponse({ res, statusCode: 404, success: false, message: "Workshop tidak ditemukan", data: null });
         }

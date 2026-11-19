@@ -79,25 +79,40 @@ export const workshopsSeed = async () => {
         },
     ];
 
+    const quotaDemoParticipant = await prisma.user.findFirst({
+        where: {
+            id: { not: instructor.id },
+            role: { name: "Student" },
+        },
+    });
+
     for (const item of sampleWorkshops) {
         const existing = await prisma.workshop.findFirst({ where: { title: item.title } });
         const workshop = existing
             ? await prisma.workshop.update({ where: { id: existing.id }, data: item })
             : await prisma.workshop.create({ data: item });
 
-        // Isi 1 peserta di workshop kuota=1 agar mencontohkan kondisi kuota penuh
-        if (item.quota === 1) {
+        // Pastikan penyelenggara/instruktur tidak terdaftar sebagai peserta pada workshop sendiri
+        await prisma.workshopParticipant.deleteMany({
+            where: {
+                workshopId: workshop.id,
+                userId: instructor.id,
+            },
+        });
+
+        // Isi 1 peserta (non-penyelenggara) di workshop kuota=1 agar mencontohkan kondisi kuota penuh
+        if (item.quota === 1 && quotaDemoParticipant) {
             await prisma.workshopParticipant.upsert({
                 where: {
                     workshopId_userId: {
                         workshopId: workshop.id,
-                        userId: instructor.id,
+                        userId: quotaDemoParticipant.id,
                     },
                 },
                 update: { status: "Terdaftar" },
                 create: {
                     workshopId: workshop.id,
-                    userId: instructor.id,
+                    userId: quotaDemoParticipant.id,
                     status: "Terdaftar",
                     notes: "Peserta perdana (kuota penuh)",
                 },
