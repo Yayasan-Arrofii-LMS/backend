@@ -119,6 +119,13 @@ class WorkshopService {
         const workshop = await workshopRepository.findById(workshopId);
         if (!workshop) return { error: "Workshop tidak ditemukan", statusCode: 404 };
 
+        if (workshop.instructorId === userId) {
+            return {
+                error: "Pembuat/penyelenggara workshop tidak dapat mendaftar pada workshop sendiri",
+                statusCode: 400,
+            };
+        }
+
         const existing = await workshopRepository.findParticipant(workshopId, userId);
         if (existing && existing.status === "Terdaftar") {
             return { error: "Anda sudah terdaftar di workshop ini", statusCode: 400 };
