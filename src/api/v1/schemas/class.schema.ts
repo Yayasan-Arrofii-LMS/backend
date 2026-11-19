@@ -12,5 +12,5 @@ export const createClassSchema = z.object({
 export const updateClassSchema = createClassSchema.partial();
 
 export const rejectClassSchema = z.object({
-    rejectionReason: z.string().trim().max(500, "Alasan penolakan maksimal 500 karakter").optional(),
+    rejectionReason: z.string().trim().max(500, "Alasan penolakan maksimal 500 karakter").nullable().optional(),
 });

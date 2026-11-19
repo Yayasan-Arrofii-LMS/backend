@@ -74,6 +74,8 @@ export const getClasses = async (req: Request, res: Response) => {
             rejectionReason: (cls as any).rejectionReason ?? null,
             approvedById: (cls as any).approvedById ?? null,
             approvedAt: (cls as any).approvedAt ?? null,
+            createdAt: (cls as any).createdAt ?? null,
+            updatedAt: (cls as any).updatedAt ?? null,
             teachers: (cls as any).teachers ?? [],
         }))
 
@@ -131,6 +133,8 @@ export const getClassById = async (req: Request, res: Response) => {
             rejectionReason: classData.rejectionReason ?? null,
             approvedById: classData.approvedById ?? null,
             approvedAt: classData.approvedAt ?? null,
+            createdAt: classData.createdAt ?? null,
+            updatedAt: classData.updatedAt ?? null,
             approver: classData.approver ?? null,
             teachers: classData.teachers,
             students: studentsInClass
