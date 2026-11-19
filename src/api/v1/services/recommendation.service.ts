@@ -1,4 +1,4 @@
-import { recommendation_feedback } from '@prisma/client';
+import { EnrollmentStatus, recommendation_feedback } from '@prisma/client';
 import prisma from '../../../database';
 import { AbilityLevel, getAbilityLevelFromScore } from '../helpers/adaptiveEngine';
 import {
@@ -294,7 +294,7 @@ export function getMaterialDifficultySuitability(
 
 async function getEnrolledSectionIds(userId: string): Promise<Set<number>> {
     const enrollments = await prisma.user_Class.findMany({
-        where: { userId },
+        where: { userId, status: EnrollmentStatus.APPROVED },
         select: {
             class: {
                 select: {

@@ -1,8 +1,8 @@
 import prisma from '../../../database';
-import { class_role } from '@prisma/client';
+import { class_role, EnrollmentStatus } from '@prisma/client';
 
 export class EnrollmentRepository {
-    // Check if user is enrolled in a class
+    // Check if user is enrolled (and approved) in a class
     static async isUserEnrolled(userId: string, classId: number) {
         const enrollment = await prisma.user_Class.findUnique({
             where: {
@@ -12,7 +12,7 @@ export class EnrollmentRepository {
                 },
             },
         });
-        return !!enrollment;
+        return enrollment?.status === EnrollmentStatus.APPROVED;
     }
 
     // Get user's enrollment in a class
@@ -39,13 +39,28 @@ export class EnrollmentRepository {
         });
     }
 
-    // Enroll user to a class
-    static async enrollUser(userId: string, classId: number) {
-        return await prisma.user_Class.create({
-            data: {
+    // Enroll user to a class (upsert allows re-enrollment after REJECTED)
+    static async enrollUser(
+        userId: string,
+        classId: number,
+        status: EnrollmentStatus = EnrollmentStatus.APPROVED
+    ) {
+        return await prisma.user_Class.upsert({
+            where: {
+                userId_classId: {
+                    userId,
+                    classId,
+                },
+            },
+            update: {
+                role: class_role.Student,
+                status,
+            },
+            create: {
                 userId,
                 classId,
                 role: class_role.Student,
+                status,
             },
             include: {
                 class: true,
@@ -75,11 +90,15 @@ export class EnrollmentRepository {
     }
 
     // Get all user's enrolled classes
-    static async getUserEnrolledClasses(userId: string) {
+    static async getUserEnrolledClasses(
+        userId: string,
+        statusFilter: EnrollmentStatus | 'ALL' = EnrollmentStatus.APPROVED
+    ) {
         const enrollments = await prisma.user_Class.findMany({
             where: {
                 userId,
                 role: class_role.Student,
+                ...(statusFilter !== 'ALL' ? { status: statusFilter } : {}),
             },
             include: {
                 class: {
@@ -188,5 +207,69 @@ export class EnrollmentRepository {
             },
         });
         return enrollment?.role === class_role.Teacher || enrollment?.role === class_role.Admin;
+    }
+
+    // Get all student applicants in a class
+    static async getClassApplicants(classId: number, status?: EnrollmentStatus) {
+        return await prisma.user_Class.findMany({
+            where: {
+                classId,
+                role: class_role.Student,
+                ...(status ? { status } : {}),
+            },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        username: true,
+                        profileImage: true,
+                    },
+                },
+            },
+            orderBy: {
+                createdAt: 'desc',
+            },
+        });
+    }
+
+    // Get a User_Class record by ID
+    static async getUserClassById(id: number) {
+        return await prisma.user_Class.findUnique({
+            where: { id },
+            include: {
+                class: true,
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        username: true,
+                        profileImage: true,
+                    },
+                },
+            },
+        });
+    }
+
+    // Update enrollment status of a User_Class record
+    static async updateEnrollmentStatus(id: number, status: EnrollmentStatus) {
+        return await prisma.user_Class.update({
+            where: { id },
+            data: { status },
+            include: {
+                class: true,
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        username: true,
+                        profileImage: true,
+                    },
+                },
+            },
+        });
     }
 }

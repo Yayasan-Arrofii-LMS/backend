@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE `class` ADD COLUMN `registrationType` ENUM('OPEN', 'APPROVAL') NOT NULL DEFAULT 'OPEN';
+
+-- AlterTable
+ALTER TABLE `user_class` ADD COLUMN `status` ENUM('PENDING', 'APPROVED', 'REJECTED') NOT NULL DEFAULT 'APPROVED';

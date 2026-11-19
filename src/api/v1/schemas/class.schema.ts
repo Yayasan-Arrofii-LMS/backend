@@ -5,7 +5,12 @@ export const createClassSchema = z.object({
     name: z.string().min(1, "Class name is required").max(100, "Class name must be at most 100 characters"),
     description: z.string().max(500, "Description must be at most 500 characters").optional(),
     categoryId: z.coerce.number().int().positive("Category ID must be a positive integer").nullable().optional(),
+    registrationType: z.enum(["AUTO", "MANUAL"]).optional(),
     file: imageSchema.optional()
 });
 
 export const updateClassSchema = createClassSchema.partial();
+
+export const rejectClassSchema = z.object({
+    rejectionReason: z.string().trim().max(500, "Alasan penolakan maksimal 500 karakter").optional(),
+});

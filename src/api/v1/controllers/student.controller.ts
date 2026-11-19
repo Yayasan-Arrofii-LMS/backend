@@ -4,6 +4,7 @@ import materialService from "../services/material.service";
 import studentService from "../services/student.service";
 import classService from "../services/class.service";
 import sectionService from "../services/section.service";
+import { EnrollmentRepository } from "../repositories/enrollment.repository";
 
 
 class StudentController {
@@ -11,6 +12,7 @@ class StudentController {
     async getClassById(req: Request, res: Response) {
         const classId = req.params.id;
         const userId = req.user?.id;
+        const userRole = req.role;
 
         const classData = await classService.getClassById(Number(classId));
 
@@ -18,17 +20,36 @@ class StudentController {
             return sendResponse({ res, statusCode: 404, success: false, message: "Class not found", data: null });
         }
 
+        // Prevent non-Admin / non-owner-teacher from accessing unapproved classes
+        if (classData.approvalStatus !== "APPROVED") {
+            const isOwnerTeacher = userId
+                ? await EnrollmentRepository.isUserTeacher(userId, Number(classId))
+                : false;
+            if (userRole !== "Admin" && !isOwnerTeacher) {
+                return sendResponse({
+                    res,
+                    statusCode: 403,
+                    success: false,
+                    message: "Kelas ini belum disetujui oleh Admin",
+                    data: null,
+                });
+            }
+        }
+
         const sections = await sectionService.getAllSectionsPublic(classId);
 
-        // Check if user is enrolled
-        const isEnrolled = userId
-            ? await studentService.checkEnrollment(userId, Number(classId))
-            : false;
+        // Check if user is enrolled (and status)
+        const enrollment = userId
+            ? await studentService.getEnrollmentDetail(userId, Number(classId))
+            : null;
+        const isEnrolled = enrollment?.status === "APPROVED";
+        const enrollmentStatus = enrollment?.status ?? null;
 
         const data = {
             ...classData,
             sections,
-            isEnrolled
+            isEnrolled,
+            enrollmentStatus,
         };
 
         sendResponse({ res, statusCode: 200, success: true, data, message: "Class retrieved successfully" });
