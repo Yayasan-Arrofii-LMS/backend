@@ -13,6 +13,8 @@ export const safeClassFields = {
     rejectionReason: true,
     approvedById: true,
     approvedAt: true,
+    createdAt: true,
+    updatedAt: true,
 };
 
 class ClassRepository {
@@ -41,7 +43,22 @@ class ClassRepository {
         approvalStatus?: class_approval_status
     ) {
         const cat = this.buildCategoryWhere(categoryId);
-        const q = search ? { OR: [{ name: { contains: search } }, { description: { contains: search } }] } : {};
+        const q = search
+            ? {
+                  OR: [
+                      { name: { contains: search } },
+                      { description: { contains: search } },
+                      {
+                          User_Class: {
+                              some: {
+                                  role: class_role.Teacher,
+                                  user: { name: { contains: search } },
+                              },
+                          },
+                      },
+                  ],
+              }
+            : {};
         const approval = approvalStatus ? { approvalStatus } : {};
         if (!userId) {
             return await prisma.class.count({ where: { ...cat, ...q, ...approval } });
@@ -128,6 +145,8 @@ class ClassRepository {
             rejectionReason: classData.rejectionReason,
             approvedById: classData.approvedById,
             approvedAt: classData.approvedAt,
+            createdAt: classData.createdAt,
+            updatedAt: classData.updatedAt,
             approver: classData.approver ?? null,
             teachers,
         };
@@ -155,6 +174,18 @@ class ClassRepository {
                 {
                     description: {
                         contains: search,
+                    }
+                },
+                {
+                    User_Class: {
+                        some: {
+                            role: class_role.Teacher,
+                            user: {
+                                name: {
+                                    contains: search,
+                                }
+                            }
+                        }
                     }
                 }
             ]
@@ -236,7 +267,7 @@ class ClassRepository {
         adminId: string,
         reason?: string | null
     ) {
-        return await prisma.class.update({
+        const updated = await prisma.class.update({
             where: { id: classId },
             data: {
                 approvalStatus: status,
@@ -250,6 +281,9 @@ class ClassRepository {
                 approver: { select: { id: true, name: true, email: true } },
             },
         });
+        const appUrl = (process.env.APP_URL || "http://localhost").replace(/\/$/, "");
+        const imagePathRelative = `${appUrl}/${updated.image_path}`.replace(/\/$/, "");
+        return { ...updated, image_path_relative: imagePathRelative };
     }
 
     async getStudentsInClass(classId: number) {
