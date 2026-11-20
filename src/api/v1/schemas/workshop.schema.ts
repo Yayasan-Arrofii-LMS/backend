@@ -51,3 +51,13 @@ export const updateWorkshopSchema = z.object({
     thumbnail: z.string().optional(),
     file: imageSchema.optional(),
 });
+
+export const rejectWorkshopSchema = z.object({
+    reason: z.string().trim().max(500, "Alasan penolakan maksimal 500 karakter").nullable().optional(),
+    rejectionReason: z.string().trim().max(500, "Alasan penolakan maksimal 500 karakter").nullable().optional(),
+});
+
+export const rejectParticipantSchema = z.object({
+    reason: z.string().trim().max(500, "Alasan penolakan maksimal 500 karakter").nullable().optional(),
+    rejectionReason: z.string().trim().max(500, "Alasan penolakan maksimal 500 karakter").nullable().optional(),
+});

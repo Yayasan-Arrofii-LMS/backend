@@ -71,3 +71,39 @@ export const authMiddleware = async (
         });
     }
 };
+
+export const optionalAuthMiddleware = async (
+    req: Request,
+    _res: Response,
+    next: NextFunction
+) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            return next();
+        }
+
+        const token = authHeader.startsWith("Bearer ")
+            ? authHeader.split(" ")[1]
+            : authHeader;
+
+        if (!token || token === "undefined" || token === "null") {
+            return next();
+        }
+
+        const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
+        const rootuser = await userRepository.findUserById(payload.user_id);
+        if (!rootuser) {
+            return next();
+        }
+
+        const userRole = await userRepository.getUserRole(payload.user_id);
+        req.user = rootuser;
+        req.token = token;
+        req.role = userRole ?? "";
+        return next();
+    } catch {
+        // Ignore invalid/expired token for optional-auth public routes
+        return next();
+    }
+};
