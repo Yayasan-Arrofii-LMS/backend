@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import { otp_type, Reset_Token, User } from '@prisma/client';
+import prisma from '../../../database';
 import { sendOTPEmail } from '../helpers/email';
 import userService from './user.service';
 import tokenService from './token.service';
@@ -55,6 +56,30 @@ export class AuthService {
         }
         const hashedPassword = await bcrypt.hash(newPassword, 10);
         await userService.updateUser(user.id, { password: hashedPassword });
+    }
+
+    async changePassword(
+        userId: string,
+        newPassword: string,
+        currentPassword?: string
+    ): Promise<void> {
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+            throw new Error('User tidak ditemukan');
+        }
+
+        if (currentPassword !== undefined && currentPassword !== '') {
+            const isMatch = await bcrypt.compare(currentPassword, user.password);
+            if (!isMatch) {
+                throw new Error('Kata sandi saat ini tidak cocok');
+            }
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await prisma.user.update({
+            where: { id: userId },
+            data: { password: hashedPassword },
+        });
     }
 
     async verifyOTP(email: string, otp: string): Promise<string | null> {

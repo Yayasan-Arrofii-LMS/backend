@@ -23,6 +23,15 @@ export const resetPasswordSchema = z.object({
     path: ['confirmPassword'],
 });
 
+export const changePasswordSchema = z.object({
+    currentPassword: z.string().optional(),
+    newPassword: z.string().min(8, 'Kata sandi baru minimal 8 karakter'),
+    confirmPassword: z.string().min(8, 'Konfirmasi kata sandi minimal 8 karakter'),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'Konfirmasi kata sandi tidak cocok',
+    path: ['confirmPassword'],
+});
+
 export const registerSchema = z.object({
     name: z.string().min(4).max(100),
     username: z.string().min(4).max(50).optional(),

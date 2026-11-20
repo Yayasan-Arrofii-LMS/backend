@@ -134,6 +134,41 @@ export class AuthController {
         }
     };
 
+    changePassword = async (req: Request, res: Response) => {
+        try {
+            const userId = req.user?.id;
+            if (!userId) {
+                return sendResponse({
+                    res,
+                    statusCode: 401,
+                    success: false,
+                    message: 'Unauthorized',
+                    data: null,
+                });
+            }
+
+            const { currentPassword, newPassword } = req.body;
+            await this.authService.changePassword(userId, newPassword, currentPassword);
+
+            return sendResponse({
+                res,
+                statusCode: 200,
+                success: true,
+                message: 'Kata sandi berhasil diperbarui',
+                data: null,
+            });
+        } catch (error: any) {
+            const statusCode = error.message === 'User tidak ditemukan' ? 404 : 400;
+            return sendResponse({
+                res,
+                statusCode,
+                success: false,
+                message: error.message || 'Gagal memperbarui kata sandi',
+                data: null,
+            });
+        }
+    };
+
 
     register = async (req: Request, res: Response) => {
         try {
