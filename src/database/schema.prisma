@@ -54,6 +54,12 @@ enum question_difficulty {
   Hard
 }
 
+enum quiz_grading_status {
+  AUTO_GRADED
+  WAITING_FOR_TEACHER
+  GRADED
+}
+
 enum otp_type {
   PasswordReset
   EmailVerification
@@ -304,6 +310,8 @@ model Quiz_Question {
   type              quiz_question_type
   points            Int                 @default(1)
   explanation       String?             @db.LongText
+  instructions      String?             @db.LongText
+  rubric            String?             @db.LongText
   difficulty        question_difficulty @default(Medium)
   difficulty_rating Float               @default(0)
   times_answered    Int                 @default(0)
@@ -328,25 +336,30 @@ model Quiz_Answer {
 }
 
 model Quiz_Attempt {
-  id               Int             @id @default(autoincrement())
+  id               Int                 @id @default(autoincrement())
   score            Int?
+  mcq_score        Float?
+  grading_status   quiz_grading_status @default(AUTO_GRADED)
   ability_estimate Float?
-  started_at       DateTime        @default(now())
+  started_at       DateTime            @default(now())
   submitted_at     DateTime?
-  is_graded        Boolean         @default(false)
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  is_graded        Boolean             @default(false)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
   userId           String
   quizId           Int
-  User             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  quiz             Quiz            @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  User             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz             Quiz                @relation(fields: [quizId], references: [id], onDelete: Cascade)
   attemp_answer    Attemp_Answer[]
 }
 
 model Attemp_Answer {
   id                     Int                      @id @default(autoincrement())
   path                   String?
-  answer                 String?
+  answer                 String?                  @db.LongText
+  score                  Float?
+  feedback               String?                  @db.LongText
+  graded_at              DateTime?
   order                  Int?
   served_at              DateTime?
   answered_at            DateTime?

@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 export const questionDifficultySchema = z.enum(["Easy", "Medium", "Hard"]);
-export const adaptiveQuestionTypeSchema = z.enum(["MultipleChoice", "TrueFalse"], {
-    message: "Tipe soal Essay tidak didukung. Gunakan MultipleChoice atau TrueFalse",
+export const questionTypeSchema = z.enum(["MultipleChoice", "TrueFalse", "Essay"], {
+    message: "Tipe soal tidak valid. Gunakan MultipleChoice, TrueFalse, atau Essay",
 });
+export const adaptiveQuestionTypeSchema = questionTypeSchema;
 
 // === Quiz ===
 export const createQuizSchema = z.object({
@@ -40,41 +41,60 @@ const answerSchema = z.object({
 
 export const createQuestionSchema = z.object({
     question: z.string().min(1, "Question is required"),
-    type: adaptiveQuestionTypeSchema,
+    type: questionTypeSchema,
     difficulty: questionDifficultySchema.optional().default("Medium"),
     points: z.number().int().min(1, "Points must be >= 1").optional().default(1),
-    explanation: z.string().optional(),
-    answers: z
-        .array(answerSchema)
-        .min(1, "At least one answer option is required"),
+    explanation: z.string().nullable().optional(),
+    instructions: z.string().nullable().optional(),
+    rubric: z.string().nullable().optional(),
+    answers: z.array(answerSchema).optional(),
 }).superRefine((data, ctx) => {
-    const answers = data.answers;
-    if (!answers || !answers.some((a) => a.is_correct)) {
-        ctx.addIssue({
-            code: "custom",
-            message: "At least one correct answer required",
-            path: ["answers"],
-        });
+    if (data.type !== "Essay") {
+        const answers = data.answers;
+        if (!answers || answers.length === 0) {
+            ctx.addIssue({
+                code: "custom",
+                message: "At least one answer option is required",
+                path: ["answers"],
+            });
+            return;
+        }
+        if (!answers.some((a) => a.is_correct)) {
+            ctx.addIssue({
+                code: "custom",
+                message: "At least one correct answer required",
+                path: ["answers"],
+            });
+        }
     }
 });
 
 export const updateQuestionSchema = z.object({
     question: z.string().min(1, "Question is required").optional(),
-    type: adaptiveQuestionTypeSchema.optional(),
+    type: questionTypeSchema.optional(),
     difficulty: questionDifficultySchema.optional(),
     points: z.number().int().min(1, "Points must be >= 1").optional(),
-    explanation: z.string().optional(),
-    answers: z
-        .array(answerSchema)
-        .min(1, "At least one answer option is required")
-        .optional(),
+    explanation: z.string().nullable().optional(),
+    instructions: z.string().nullable().optional(),
+    rubric: z.string().nullable().optional(),
+    answers: z.array(answerSchema).optional(),
 }).superRefine((data, ctx) => {
-    if (data.answers !== undefined && !data.answers.some((a) => a.is_correct)) {
-        ctx.addIssue({
-            code: "custom",
-            message: "At least one correct answer required",
-            path: ["answers"],
-        });
+    if (data.type !== "Essay" && data.answers !== undefined) {
+        if (data.answers.length === 0) {
+            ctx.addIssue({
+                code: "custom",
+                message: "At least one answer option is required",
+                path: ["answers"],
+            });
+            return;
+        }
+        if (!data.answers.some((a) => a.is_correct)) {
+            ctx.addIssue({
+                code: "custom",
+                message: "At least one correct answer required",
+                path: ["answers"],
+            });
+        }
     }
 });
 
@@ -110,6 +130,18 @@ export const getAttemptResultSchema = z.object({
     attemptId: z.number().int(),
 });
 
+// === Teacher: Grade Essay Attempt ===
+export const gradeEssayItemSchema = z.object({
+    questionId: z.number().int().positive("Question ID must be a positive integer"),
+    score: z.number().min(0, "Nilai tidak boleh negatif"),
+    feedback: z.string().nullable().optional(),
+});
+
+export const gradeEssayAttemptSchema = z.object({
+    attemptId: z.number().int().positive().optional(),
+    grades: z.array(gradeEssayItemSchema).min(1, "Minimal satu penilaian harus disertakan"),
+});
+
 export const bulkCreateQuestionsSchema = z.object({
     title: z.string().min(1, "Title is required"),
     description: z.string().min(1, "Description is required"),
@@ -126,3 +158,4 @@ export const bulkCreateQuestionsSchema = z.object({
 
 export type BulkCreateQuestionsInput = z.infer<typeof bulkCreateQuestionsSchema>;
 export type AdaptiveAnswerInput = z.infer<typeof adaptiveAnswerSchema>;
+export type GradeEssayAttemptInput = z.infer<typeof gradeEssayAttemptSchema>;

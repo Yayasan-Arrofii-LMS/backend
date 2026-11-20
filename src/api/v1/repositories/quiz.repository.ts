@@ -2,6 +2,7 @@ import {
     AdaptiveAnswerInput,
     CreateQuestionInput,
     CreateQuizInput,
+    GradeEssayItemInput,
     UpdateQuestionInput,
     getDifficultyRating,
 } from '../types/quiz.type';
@@ -16,22 +17,37 @@ import {
     updateAbility,
 } from '../helpers/adaptiveEngine';
 import prisma from '../../../database';
-import { question_difficulty, quiz_question_type } from '@prisma/client';
+import {
+    question_difficulty,
+    quiz_grading_status,
+    quiz_question_type,
+} from '@prisma/client';
 
 export class QuizRepository {
+    private static formatProfileImageUrl(path?: string | null): string | null {
+        if (!path) return null;
+        if (/^https?:\/\//i.test(path)) return path;
+        const appUrl = (process.env.APP_URL || 'http://localhost:3001').replace(/\/$/, '');
+        return `${appUrl}/${path.replace(/^\//, '')}`;
+    }
+
     /**
-     * Format soal untuk dikirim ke siswa saat kuis berlangsung (tanpa bocoran is_correct / explanation / difficulty).
+     * Format soal untuk dikirim ke siswa saat kuis berlangsung (tanpa bocoran is_correct / explanation / difficulty / rubric).
      */
     static formatSafeQuestionForStudent(question: {
         id: number;
         question: string;
         type: string;
+        points?: number;
+        instructions?: string | null;
         quiz_answer: { id: number; answer: string }[];
     }) {
         return {
             id: question.id,
             question: question.question,
             type: question.type,
+            points: question.points ?? 1,
+            instructions: question.instructions ?? null,
             answers:
                 question.type === 'Essay'
                     ? []
@@ -46,6 +62,9 @@ export class QuizRepository {
      * Evaluasi apakah satu baris Attemp_Answer bernilai benar.
      */
     private static isAttemptAnswerCorrect(answerRow: any, question: any): boolean {
+        if (question.type === 'Essay') {
+            return false;
+        }
         if (typeof answerRow.is_correct === 'boolean') {
             return answerRow.is_correct;
         }
@@ -59,40 +78,91 @@ export class QuizRepository {
     }
 
     /**
-     * Hitung ringkasan skor adaptif (persentase 0-100, jumlah benar, total soal MC/TF, isPassed, level).
-     * Kompatibel dengan attempt adaptif baru maupun attempt lama sebelum migrasi.
+     * Hitung ringkasan skor (MC/TF adaptif maupun campuran MC/TF + Essay).
      */
     static computeAttemptMetrics(attempt: any) {
         const allQuestions: any[] = attempt.quiz?.quiz_question ?? [];
         const eligibleQuestions = filterAdaptiveEligibleQuestions(allQuestions);
-        const totalQuestions = eligibleQuestions.length;
+        const essayQuestions = allQuestions.filter((q) => q.type === 'Essay');
+        const hasEssay = essayQuestions.length > 0;
+        const totalQuestions = hasEssay ? allQuestions.length : eligibleQuestions.length;
 
         let correctAnswersCount = 0;
-        const answers: any[] = attempt.attemp_answer ?? [];
+        let mcqEarnedPoints = 0;
+        let essayEarnedPoints = 0;
+        let gradedEssayCount = 0;
 
+        const answers: any[] = attempt.attemp_answer ?? [];
+        const answerByQuestionId = new Map<number, any>();
         for (const ans of answers) {
-            const q = eligibleQuestions.find((item) => item.id === ans.questionId);
-            if (!q) continue;
+            answerByQuestionId.set(ans.questionId, ans);
+        }
+
+        for (const q of eligibleQuestions) {
+            const ans = answerByQuestionId.get(q.id);
+            if (!ans) continue;
             if (this.isAttemptAnswerCorrect(ans, q)) {
                 correctAnswersCount++;
+                mcqEarnedPoints += q.points ?? 1;
             }
         }
+
+        for (const q of essayQuestions) {
+            const ans = answerByQuestionId.get(q.id);
+            if (ans && ans.score !== null && ans.score !== undefined) {
+                essayEarnedPoints += Number(ans.score);
+                gradedEssayCount++;
+            }
+        }
+
+        const totalMaxPoints = allQuestions.reduce((sum, q) => sum + (q.points ?? 1), 0);
+        const totalEarnedPoints = Number((mcqEarnedPoints + essayEarnedPoints).toFixed(2));
+        const ungradedEssayCount = Math.max(0, essayQuestions.length - gradedEssayCount);
+
+        const isFullyGraded = hasEssay
+            ? Boolean(attempt.is_graded) ||
+              attempt.grading_status === quiz_grading_status.GRADED ||
+              (answers.length > 0 && ungradedEssayCount === 0 && attempt.submitted_at !== null)
+            : true;
+
+        let gradingStatus: 'Menunggu Penilaian' | 'Sedang Dinilai' | 'Penilaian Selesai' =
+            'Penilaian Selesai';
+        if (hasEssay && !isFullyGraded) {
+            gradingStatus =
+                gradedEssayCount > 0 && ungradedEssayCount > 0
+                    ? 'Sedang Dinilai'
+                    : 'Menunggu Penilaian';
+        }
+
+        const mcqScore: number | null =
+            attempt.mcq_score !== null && attempt.mcq_score !== undefined
+                ? Number(attempt.mcq_score)
+                : eligibleQuestions.length > 0
+                  ? mcqEarnedPoints
+                  : null;
 
         const isAdaptiveAttempt =
             attempt.ability_estimate !== null && attempt.ability_estimate !== undefined;
 
-        let percentage: number;
-        if (isAdaptiveAttempt) {
+        let percentage: number | null;
+        if (hasEssay) {
+            if (!isFullyGraded) {
+                percentage = null;
+            } else if (typeof attempt.score === 'number' && answers.length === 0) {
+                percentage = attempt.score;
+            } else {
+                percentage =
+                    totalMaxPoints > 0
+                        ? Math.round((totalEarnedPoints / totalMaxPoints) * 100)
+                        : 0;
+            }
+        } else if (isAdaptiveAttempt) {
             percentage =
                 typeof attempt.score === 'number' && attempt.submitted_at !== null
                     ? attempt.score
-                    : computeAdaptivePercentageScore(correctAnswersCount, totalQuestions);
+                    : computeAdaptivePercentageScore(correctAnswersCount, eligibleQuestions.length);
         } else {
-            // Kompatibilitas attempt lama (sebelum migrasi)
-            const totalLegacyPoints = allQuestions.reduce(
-                (sum, q) => sum + (q.points ?? 1),
-                0
-            );
+            const totalLegacyPoints = allQuestions.reduce((sum, q) => sum + (q.points ?? 1), 0);
             if (typeof attempt.score === 'number') {
                 percentage =
                     totalLegacyPoints > 0
@@ -101,19 +171,36 @@ export class QuizRepository {
             } else {
                 percentage = computeAdaptivePercentageScore(
                     correctAnswersCount,
-                    totalQuestions
+                    eligibleQuestions.length
                 );
             }
         }
 
         const passingGrade = attempt.quiz?.passing_grade ?? 0;
-        const isPassed = percentage >= passingGrade;
+        const isPassed = isFullyGraded && percentage !== null ? percentage >= passingGrade : false;
         const abilityEstimate = Number((attempt.ability_estimate ?? 0).toFixed(4));
-        const abilityLevel = getAbilityLevelFromScore(percentage);
+        const abilityLevel = getAbilityLevelFromScore(percentage ?? 0);
 
         return {
             score: percentage,
             percentage,
+            finalScore: isFullyGraded ? percentage : null,
+            final_score: isFullyGraded ? percentage : null,
+            mcqScore,
+            mcq_score: mcqScore,
+            hasEssay,
+            essayCount: essayQuestions.length,
+            ungradedEssayCount: isFullyGraded ? 0 : ungradedEssayCount,
+            gradingStatus,
+            grading_status:
+                attempt.grading_status ??
+                (hasEssay
+                    ? isFullyGraded
+                        ? quiz_grading_status.GRADED
+                        : quiz_grading_status.WAITING_FOR_TEACHER
+                    : quiz_grading_status.AUTO_GRADED),
+            totalEarnedPoints,
+            totalMaxPoints,
             totalScore: 100,
             totalQuestions,
             correctAnswersCount,
@@ -172,9 +259,7 @@ export class QuizRepository {
 
         const quizzesWithAttempts = await Promise.all(
             quizzes.map(async (quiz) => {
-                const eligibleCount = filterAdaptiveEligibleQuestions(
-                    quiz.quiz_question
-                ).length;
+                const totalQuestionCount = quiz.quiz_question.length;
 
                 const attemptsRaw = await prisma.quiz_Attempt.findMany({
                     where: {
@@ -185,9 +270,19 @@ export class QuizRepository {
                     select: {
                         id: true,
                         score: true,
+                        mcq_score: true,
+                        grading_status: true,
                         ability_estimate: true,
                         is_graded: true,
                         submitted_at: true,
+                        attemp_answer: {
+                            select: {
+                                questionId: true,
+                                score: true,
+                                graded_at: true,
+                                is_correct: true,
+                            },
+                        },
                     },
                     orderBy: { submitted_at: 'desc' },
                 });
@@ -200,12 +295,17 @@ export class QuizRepository {
                             show_review: quiz.show_review,
                             quiz_question: quiz.quiz_question,
                         },
-                        attemp_answer: [],
                     });
                     return {
                         id: a.id,
-                        score: metrics.percentage,
+                        score: metrics.score,
                         percentage: metrics.percentage,
+                        mcqScore: metrics.mcqScore,
+                        mcq_score: metrics.mcqScore,
+                        finalScore: metrics.finalScore,
+                        final_score: metrics.finalScore,
+                        hasEssay: metrics.hasEssay,
+                        gradingStatus: metrics.gradingStatus,
                         isPassed: metrics.isPassed,
                         abilityLevel: metrics.abilityLevel,
                         is_graded: a.is_graded,
@@ -213,16 +313,17 @@ export class QuizRepository {
                     };
                 });
 
+                const gradedScores = normalizedAttempts
+                    .map((a) => a.score)
+                    .filter((s): s is number => typeof s === 'number');
                 const bestScore =
-                    normalizedAttempts.length > 0
-                        ? Math.max(...normalizedAttempts.map((a) => a.score))
-                        : null;
+                    gradedScores.length > 0 ? Math.max(...gradedScores) : null;
 
                 const { quiz_question, ...quizInfo } = quiz;
 
                 return {
                     ...quizInfo,
-                    totalQuestions: eligibleCount,
+                    totalQuestions: totalQuestionCount,
                     attemptsUsed: normalizedAttempts.length,
                     attemptsRemaining: Math.max(
                         0,
@@ -297,9 +398,7 @@ export class QuizRepository {
             return null;
         }
 
-        const totalQuestions = filterAdaptiveEligibleQuestions(
-            quiz.quiz_question
-        ).length;
+        const totalQuestions = quiz.quiz_question.length;
 
         const attemptsRaw = await prisma.quiz_Attempt.findMany({
             where: {
@@ -310,10 +409,20 @@ export class QuizRepository {
             select: {
                 id: true,
                 score: true,
+                mcq_score: true,
+                grading_status: true,
                 ability_estimate: true,
                 is_graded: true,
                 started_at: true,
                 submitted_at: true,
+                attemp_answer: {
+                    select: {
+                        questionId: true,
+                        score: true,
+                        graded_at: true,
+                        is_correct: true,
+                    },
+                },
             },
             orderBy: { submitted_at: 'desc' },
         });
@@ -326,20 +435,26 @@ export class QuizRepository {
                     show_review: quiz.show_review,
                     quiz_question: quiz.quiz_question,
                 },
-                attemp_answer: [],
             });
 
+            const { attemp_answer, ...attemptSummary } = attempt;
             return {
-                ...attempt,
-                score: metrics.percentage,
+                ...attemptSummary,
+                score: metrics.score,
                 percentage: metrics.percentage,
+                mcqScore: metrics.mcqScore,
+                mcq_score: metrics.mcqScore,
+                finalScore: metrics.finalScore,
+                final_score: metrics.finalScore,
+                hasEssay: metrics.hasEssay,
+                gradingStatus: metrics.gradingStatus,
                 isPassed: metrics.isPassed,
                 abilityEstimate: metrics.abilityEstimate,
                 abilityLevel: metrics.abilityLevel,
             };
         });
 
-        const ongoingAttempt = await prisma.quiz_Attempt.findFirst({
+        const ongoingAttemptRaw = await prisma.quiz_Attempt.findFirst({
             where: {
                 quizId,
                 userId,
@@ -351,10 +466,15 @@ export class QuizRepository {
             },
         });
 
+        const ongoingAttempt = ongoingAttemptRaw
+            ? { ...ongoingAttemptRaw, attemptId: ongoingAttemptRaw.id }
+            : null;
+
+        const gradedPercentages = attempts
+            .map((a) => a.percentage)
+            .filter((p): p is number => typeof p === 'number');
         const bestScore =
-            attempts.length > 0
-                ? Math.max(...attempts.map((a) => a.percentage))
-                : null;
+            gradedPercentages.length > 0 ? Math.max(...gradedPercentages) : null;
 
         return {
             id: quiz.id,
@@ -407,12 +527,14 @@ export class QuizRepository {
                     points: data.points ?? 1,
                     difficulty,
                     difficulty_rating: difficultyRating,
-                    explanation: data.explanation,
+                    explanation: data.explanation ?? null,
+                    instructions: data.instructions ?? null,
+                    rubric: data.rubric ?? null,
                     quizId,
                 },
             });
 
-            if (data.answers && data.answers.length > 0) {
+            if (data.type !== 'Essay' && data.answers && data.answers.length > 0) {
                 await tx.quiz_Answer.createMany({
                     data: data.answers.map((a) => ({
                         answer: a.answer,
@@ -436,6 +558,8 @@ export class QuizRepository {
             if (data.type !== undefined) updateData.type = data.type;
             if (data.points !== undefined) updateData.points = data.points;
             if (data.explanation !== undefined) updateData.explanation = data.explanation;
+            if (data.instructions !== undefined) updateData.instructions = data.instructions;
+            if (data.rubric !== undefined) updateData.rubric = data.rubric;
             if (data.difficulty !== undefined) {
                 updateData.difficulty = data.difficulty as question_difficulty;
                 updateData.difficulty_rating = getDifficultyRating(data.difficulty);
@@ -446,7 +570,9 @@ export class QuizRepository {
                 data: updateData,
             });
 
-            if (data.answers !== undefined) {
+            if (data.type === 'Essay') {
+                await tx.quiz_Answer.deleteMany({ where: { questionId } });
+            } else if (data.answers !== undefined) {
                 await tx.quiz_Answer.deleteMany({ where: { questionId } });
                 if (data.answers.length > 0) {
                     await tx.quiz_Answer.createMany({
@@ -559,16 +685,18 @@ export class QuizRepository {
             const eligibleQuestions = filterAdaptiveEligibleQuestions(
                 quiz.quiz_question
             );
-            if (eligibleQuestions.length === 0) {
-                throw new Error('Quiz belum memiliki soal pilihan ganda atau benar/salah');
+            const essayQuestions = quiz.quiz_question.filter((q) => q.type === 'Essay');
+            const totalQuestions = quiz.quiz_question.length;
+
+            if (totalQuestions === 0) {
+                throw new Error('Quiz belum memiliki soal');
             }
 
             const now = new Date();
-            const firstQuestion = selectNextQuestion(
-                eligibleQuestions,
-                [],
-                DEFAULT_INITIAL_THETA
-            );
+            const firstQuestion =
+                eligibleQuestions.length > 0
+                    ? selectNextQuestion(eligibleQuestions, [], DEFAULT_INITIAL_THETA)
+                    : essayQuestions[0];
 
             if (!firstQuestion) {
                 throw new Error('Gagal memilih soal pertama');
@@ -580,6 +708,10 @@ export class QuizRepository {
                     quizId,
                     started_at: now,
                     ability_estimate: DEFAULT_INITIAL_THETA,
+                    grading_status:
+                        essayQuestions.length > 0
+                            ? quiz_grading_status.WAITING_FOR_TEACHER
+                            : quiz_grading_status.AUTO_GRADED,
                 },
             });
 
@@ -595,13 +727,14 @@ export class QuizRepository {
             });
 
             return {
+                id: attempt.id,
                 attemptId: attempt.id,
                 quizId: quiz.id,
                 quizTitle: quiz.title,
                 timeLimit: quiz.time_limit,
                 timeRemainingSeconds: quiz.time_limit * 60,
                 startedAt: attempt.started_at,
-                totalQuestions: eligibleQuestions.length,
+                totalQuestions,
                 currentQuestionNumber: 1,
                 question: this.formatSafeQuestionForStudent(firstQuestion),
             };
@@ -639,10 +772,10 @@ export class QuizRepository {
 
             if (!attempt) return null;
 
-            const eligibleQuestions = filterAdaptiveEligibleQuestions(
-                attempt.quiz.quiz_question
-            );
-            const totalQuestions = eligibleQuestions.length;
+            const allQuestions = attempt.quiz.quiz_question;
+            const eligibleQuestions = filterAdaptiveEligibleQuestions(allQuestions);
+            const essayQuestions = allQuestions.filter((q) => q.type === 'Essay');
+            const totalQuestions = allQuestions.length;
             const now = new Date();
             const elapsedSeconds = Math.floor(
                 (now.getTime() - attempt.started_at.getTime()) / 1000
@@ -659,16 +792,17 @@ export class QuizRepository {
 
             if (!activeAnswer) {
                 const servedIds = attempt.attemp_answer.map((a) => a.questionId);
+                const servedSet = new Set(servedIds);
                 const currentTheta =
                     attempt.ability_estimate ?? DEFAULT_INITIAL_THETA;
-                const nextQ = selectNextQuestion(
-                    eligibleQuestions,
-                    servedIds,
-                    currentTheta
-                );
+                const nextQ =
+                    selectNextQuestion(eligibleQuestions, servedIds, currentTheta) ??
+                    essayQuestions.find((q) => !servedSet.has(q.id)) ??
+                    null;
 
                 if (!nextQ) {
                     return {
+                        id: attempt.id,
                         attemptId: attempt.id,
                         quizId: attempt.quizId,
                         quizTitle: attempt.quiz.title,
@@ -695,7 +829,7 @@ export class QuizRepository {
                 });
             }
 
-            const activeQuestion = eligibleQuestions.find(
+            const activeQuestion = allQuestions.find(
                 (q) => q.id === activeAnswer!.questionId
             );
 
@@ -707,6 +841,7 @@ export class QuizRepository {
                 activeAnswer.order ?? attempt.attemp_answer.length;
 
             return {
+                id: attempt.id,
                 attemptId: attempt.id,
                 quizId: attempt.quizId,
                 quizTitle: attempt.quiz.title,
@@ -754,12 +889,13 @@ export class QuizRepository {
                 throw new Error('Quiz sudah di-submit');
             }
 
-            const eligibleQuestions = filterAdaptiveEligibleQuestions(
-                attempt.quiz.quiz_question
-            );
-            const totalQuestions = eligibleQuestions.length;
+            const allQuestions = attempt.quiz.quiz_question;
+            const eligibleQuestions = filterAdaptiveEligibleQuestions(allQuestions);
+            const essayQuestions = allQuestions.filter((q) => q.type === 'Essay');
+            const hasEssay = essayQuestions.length > 0;
+            const totalQuestions = allQuestions.length;
 
-            const currentQuestion = eligibleQuestions.find(
+            const currentQuestion = allQuestions.find(
                 (q) => q.id === data.questionId
             );
             if (!currentQuestion) {
@@ -795,19 +931,26 @@ export class QuizRepository {
                 throw new Error('Soal ini sudah dijawab');
             }
 
-            const isCorrect = evaluateAnswerCorrectness(currentQuestion, {
-                selectedAnswerIds: data.selectedAnswerIds,
-                answer: data.answer,
-            });
+            const isEssayQuestion = currentQuestion.type === 'Essay';
+            const isCorrect = isEssayQuestion
+                ? null
+                : evaluateAnswerCorrectness(currentQuestion, {
+                      selectedAnswerIds: data.selectedAnswerIds,
+                      answer: data.answer,
+                  });
 
             const thetaBefore =
                 attempt.ability_estimate ?? DEFAULT_INITIAL_THETA;
             const b = resolveQuestionDifficultyRating(currentQuestion);
-            const thetaAfter = updateAbility(thetaBefore, b, isCorrect);
+            const thetaAfter =
+                isEssayQuestion || isCorrect === null
+                    ? thetaBefore
+                    : updateAbility(thetaBefore, b, isCorrect);
 
-            // Resolusi teks jawaban (untuk kompatibilitas TrueFalse dan histori)
+            // Resolusi teks jawaban (untuk kompatibilitas TrueFalse, Essay, dan histori)
             let resolvedAnswerText = data.answer ?? null;
             if (
+                !isEssayQuestion &&
                 !resolvedAnswerText &&
                 data.selectedAnswerIds &&
                 data.selectedAnswerIds.length === 1
@@ -826,6 +969,7 @@ export class QuizRepository {
                     answer: resolvedAnswerText,
                     answered_at: now,
                     is_correct: isCorrect,
+                    score: isEssayQuestion ? null : isCorrect ? currentQuestion.points : 0,
                     ability_before: thetaBefore,
                     ability_after: thetaAfter,
                 },
@@ -835,7 +979,7 @@ export class QuizRepository {
                 where: { attempt_answerId: activeAnswer.id },
             });
 
-            if (data.selectedAnswerIds && data.selectedAnswerIds.length > 0) {
+            if (!isEssayQuestion && data.selectedAnswerIds && data.selectedAnswerIds.length > 0) {
                 const validOptionIds = new Set(
                     currentQuestion.quiz_answer.map((opt) => opt.id)
                 );
@@ -857,14 +1001,16 @@ export class QuizRepository {
                 }
             }
 
-            // Update statistik kalibrasi soal
-            await tx.quiz_Question.update({
-                where: { id: currentQuestion.id },
-                data: {
-                    times_answered: { increment: 1 },
-                    ...(isCorrect ? { times_correct: { increment: 1 } } : {}),
-                },
-            });
+            // Update statistik kalibrasi soal (khusus MC/TF)
+            if (!isEssayQuestion) {
+                await tx.quiz_Question.update({
+                    where: { id: currentQuestion.id },
+                    data: {
+                        times_answered: { increment: 1 },
+                        ...(isCorrect ? { times_correct: { increment: 1 } } : {}),
+                    },
+                });
+            }
 
             // Daftar soal yang sudah disajikan sejauh ini
             const servedIds = new Set<number>(
@@ -877,11 +1023,10 @@ export class QuizRepository {
                     (a) => a.id !== activeAnswer.id && a.answered_at !== null
                 ).length + 1;
 
-            const nextQuestion = selectNextQuestion(
-                eligibleQuestions,
-                servedIds,
-                thetaAfter
-            );
+            const nextQuestion =
+                selectNextQuestion(eligibleQuestions, servedIds, thetaAfter) ??
+                essayQuestions.find((q) => !servedIds.has(q.id)) ??
+                null;
 
             if (nextQuestion) {
                 const nextOrder = servedIds.size + 1;
@@ -915,35 +1060,51 @@ export class QuizRepository {
                 };
             }
 
-            // Semua soal MC/TF telah selesai dijawab -> hitung skor akhir & tandai selesai
-            const previouslyCorrectCount = attempt.attemp_answer.filter(
-                (a) => a.id !== activeAnswer.id && a.is_correct === true
-            ).length;
-            const totalCorrectCount =
-                previouslyCorrectCount + (isCorrect ? 1 : 0);
+            // Semua soal telah selesai dijawab -> hitung skor MC/TF & tandai selesai
+            let totalCorrectCount = 0;
+            let mcqEarnedPoints = 0;
+            for (const q of eligibleQuestions) {
+                const row = attempt.attemp_answer.find((a) => a.questionId === q.id);
+                const rowCorrect =
+                    q.id === currentQuestion.id ? isCorrect === true : row?.is_correct === true;
+                if (rowCorrect) {
+                    totalCorrectCount++;
+                    mcqEarnedPoints += q.points ?? 1;
+                }
+            }
+
             const finalPercentageScore = computeAdaptivePercentageScore(
                 totalCorrectCount,
-                totalQuestions
+                eligibleQuestions.length
             );
 
             await tx.quiz_Attempt.update({
                 where: { id: attempt.id },
                 data: {
                     ability_estimate: thetaAfter,
-                    score: finalPercentageScore,
-                    is_graded: true,
+                    mcq_score: eligibleQuestions.length > 0 ? mcqEarnedPoints : null,
+                    score: hasEssay ? null : finalPercentageScore,
+                    is_graded: !hasEssay,
+                    grading_status: hasEssay
+                        ? quiz_grading_status.WAITING_FOR_TEACHER
+                        : quiz_grading_status.AUTO_GRADED,
                     submitted_at: now,
                 },
             });
 
             return {
                 done: true,
+                id: attempt.id,
                 attemptId: attempt.id,
+                isGraded: !hasEssay,
+                gradingStatus: hasEssay ? 'Menunggu Penilaian' : 'Penilaian Selesai',
                 progress: {
                     answered: answeredCount,
                     total: totalQuestions,
                 },
-                message: 'Seluruh soal telah selesai dijawab',
+                message: hasEssay
+                    ? 'Seluruh soal selesai dijawab. Menunggu penilaian guru untuk soal uraian'
+                    : 'Seluruh soal telah selesai dijawab',
             };
         });
     }
@@ -1026,53 +1187,77 @@ export class QuizRepository {
 
         if (!attempt) return null;
 
-        const eligibleQuestions = filterAdaptiveEligibleQuestions(
-            attempt.quiz.quiz_question
-        );
+        const allQuestions = attempt.quiz.quiz_question;
+        const eligibleQuestions = filterAdaptiveEligibleQuestions(allQuestions);
+        const essayQuestions = allQuestions.filter((q) => q.type === 'Essay');
+        const hasEssay = essayQuestions.length > 0;
 
-        const servedQuestions = attempt.attemp_answer
-            .map((ansRow, index) => {
-                const question = eligibleQuestions.find(
-                    (q) => q.id === ansRow.questionId
-                );
-                if (!question) return null;
+        const answerByQuestionId = new Map<number, (typeof attempt.attemp_answer)[0]>();
+        for (const ansRow of attempt.attemp_answer) {
+            answerByQuestionId.set(ansRow.questionId, ansRow);
+        }
 
-                return {
-                    order: ansRow.order ?? index + 1,
-                    id: question.id,
-                    question: question.question,
-                    type: question.type,
-                    answers: question.quiz_answer.map((ans) => ({
-                        id: ans.id,
-                        answer: ans.answer,
-                    })),
-                    isAnswered: ansRow.answered_at !== null,
-                    savedAnswer:
-                        ansRow.answered_at !== null ||
-                        ansRow.answer !== null ||
-                        ansRow.attemp_multiple_answer.length > 0
-                            ? {
-                                  answer: ansRow.answer,
-                                  path: ansRow.path,
-                                  selectedAnswerIds:
-                                      ansRow.attemp_multiple_answer.map(
-                                          (ma) => ma.answerId
-                                      ),
-                              }
-                            : null,
-                };
-            })
-            .filter(Boolean);
+        const formatQuestionItem = (question: any, ansRow: any, order: number) => ({
+            order,
+            id: question.id,
+            question: question.question,
+            type: question.type,
+            points: question.points ?? 1,
+            instructions: question.instructions ?? null,
+            answers:
+                question.type === 'Essay'
+                    ? []
+                    : question.quiz_answer.map((ans: any) => ({
+                          id: ans.id,
+                          answer: ans.answer,
+                      })),
+            isAnswered: ansRow ? ansRow.answered_at !== null : false,
+            savedAnswer:
+                ansRow &&
+                (ansRow.answered_at !== null ||
+                    ansRow.answer !== null ||
+                    ansRow.attemp_multiple_answer.length > 0)
+                    ? {
+                          answer: ansRow.answer,
+                          path: ansRow.path,
+                          selectedAnswerIds: ansRow.attemp_multiple_answer.map(
+                              (ma: any) => ma.answerId
+                          ),
+                      }
+                    : null,
+        });
+
+        let questionsOutput: any[];
+        if (hasEssay) {
+            // Untuk kuis yang memuat soal Uraian (Essay), kirim seluruh soal (MC/TF terlebih dahulu lalu Essay)
+            const orderedAll = [...eligibleQuestions, ...essayQuestions];
+            questionsOutput = orderedAll.map((question, idx) => {
+                const ansRow = answerByQuestionId.get(question.id);
+                return formatQuestionItem(question, ansRow, ansRow?.order ?? idx + 1);
+            });
+        } else {
+            // Guard anti-bocor untuk kuis murni adaptif MC/TF: hanya soal yang sudah disajikan
+            questionsOutput = attempt.attemp_answer
+                .map((ansRow, index) => {
+                    const question = eligibleQuestions.find(
+                        (q) => q.id === ansRow.questionId
+                    );
+                    if (!question) return null;
+                    return formatQuestionItem(question, ansRow, ansRow.order ?? index + 1);
+                })
+                .filter(Boolean);
+        }
 
         return {
+            id: attempt.id,
             attemptId: attempt.id,
             quizId: attempt.quizId,
             quizTitle: attempt.quiz.title,
             timeLimit: attempt.quiz.time_limit,
             startedAt: attempt.started_at,
             submittedAt: attempt.submitted_at,
-            totalQuestions: eligibleQuestions.length,
-            questions: servedQuestions,
+            totalQuestions: hasEssay ? allQuestions.length : eligibleQuestions.length,
+            questions: questionsOutput,
         };
     }
 
@@ -1164,8 +1349,12 @@ export class QuizRepository {
 
             if (!attempt) throw new Error('Attempt not found');
 
-            // Idempotent jika sudah di-submit sebelumnya (misal otomatis selesai di soal terakhir)
-            if (attempt.submitted_at !== null && attempt.is_graded) {
+            // Idempotent jika sudah di-submit sebelumnya
+            if (
+                attempt.submitted_at !== null &&
+                (attempt.is_graded ||
+                    attempt.grading_status === quiz_grading_status.WAITING_FOR_TEACHER)
+            ) {
                 const metrics = this.computeAttemptMetrics(attempt);
                 return {
                     ...attempt,
@@ -1173,10 +1362,13 @@ export class QuizRepository {
                 };
             }
 
-            const eligibleQuestions = filterAdaptiveEligibleQuestions(
-                attempt.quiz.quiz_question
-            );
+            const allQuestions = attempt.quiz.quiz_question;
+            const eligibleQuestions = filterAdaptiveEligibleQuestions(allQuestions);
+            const essayQuestions = allQuestions.filter((q) => q.type === 'Essay');
+            const hasEssay = essayQuestions.length > 0;
+
             let correctCount = 0;
+            let mcqEarnedPoints = 0;
 
             for (const ans of attempt.attemp_answer) {
                 const q = eligibleQuestions.find((item) => item.id === ans.questionId);
@@ -1195,11 +1387,17 @@ export class QuizRepository {
                           ? this.isAttemptAnswerCorrect(ans, q)
                           : false;
 
-                if (ans.is_correct === null || ans.is_correct === undefined) {
+                if (
+                    ans.is_correct === null ||
+                    ans.is_correct === undefined ||
+                    ans.score === null ||
+                    ans.score === undefined
+                ) {
                     await tx.attemp_Answer.update({
                         where: { id: ans.id },
                         data: {
                             is_correct: isCorrect,
+                            score: isCorrect ? q.points : 0,
                             answered_at: ans.answered_at ?? new Date(),
                         },
                     });
@@ -1207,6 +1405,18 @@ export class QuizRepository {
 
                 if (isCorrect) {
                     correctCount++;
+                    mcqEarnedPoints += q.points ?? 1;
+                }
+            }
+
+            // Pastikan seluruh soal Essay tercatat waktunya jika sudah dijawab
+            for (const q of essayQuestions) {
+                const ans = attempt.attemp_answer.find((a) => a.questionId === q.id);
+                if (ans && !ans.answered_at) {
+                    await tx.attemp_Answer.update({
+                        where: { id: ans.id },
+                        data: { answered_at: new Date() },
+                    });
                 }
             }
 
@@ -1221,9 +1431,13 @@ export class QuizRepository {
                 where: { id: attemptId },
                 data: {
                     submitted_at: attempt.submitted_at ?? new Date(),
-                    score: percentageScore,
+                    score: hasEssay ? null : percentageScore,
+                    mcq_score: eligibleQuestions.length > 0 ? mcqEarnedPoints : null,
                     ability_estimate: finalTheta,
-                    is_graded: true,
+                    is_graded: !hasEssay,
+                    grading_status: hasEssay
+                        ? quiz_grading_status.WAITING_FOR_TEACHER
+                        : quiz_grading_status.AUTO_GRADED,
                 },
                 include: {
                     quiz: {
@@ -1291,7 +1505,13 @@ export class QuizRepository {
 
         return Promise.all(
             attempts.map(async (attempt) => {
-                if (attempt.submitted_at !== null && !attempt.is_graded) {
+                const hasEssay = attempt.quiz.quiz_question.some((q) => q.type === 'Essay');
+                if (
+                    attempt.submitted_at !== null &&
+                    !attempt.is_graded &&
+                    !hasEssay &&
+                    attempt.grading_status !== quiz_grading_status.WAITING_FOR_TEACHER
+                ) {
                     const graded = await this.submitQuiz(attempt.id);
                     return graded;
                 }
@@ -1352,7 +1572,11 @@ export class QuizRepository {
                 attemptId: attempt.id,
                 quizId: attempt.quizId,
                 quizTitle: attempt.quiz.title,
-                score: metrics.percentage,
+                score: metrics.score,
+                finalScore: metrics.finalScore,
+                mcqScore: metrics.mcqScore,
+                hasEssay: metrics.hasEssay,
+                gradingStatus: metrics.gradingStatus,
                 totalScore: 100,
                 passingGrade: attempt.quiz.passing_grade,
                 percentage: metrics.percentage,
@@ -1367,36 +1591,49 @@ export class QuizRepository {
                 submittedAt: attempt.submitted_at,
                 message:
                     'Guru menonaktifkan tinjauan pembahasan untuk kuis ini.',
+                questions: [],
                 reviews: [],
                 review: [],
             };
         }
 
-        const eligibleQuestions = filterAdaptiveEligibleQuestions(
-            attempt.quiz.quiz_question
-        );
+        const allQuestions = attempt.quiz.quiz_question;
+        const eligibleQuestions = filterAdaptiveEligibleQuestions(allQuestions);
+        const essayQuestions = allQuestions.filter((q) => q.type === 'Essay');
 
-        // Urutkan soal berdasarkan urutan penyajian ke siswa (order asc), diikuti soal yang belum sempat disajikan jika waktu habis
+        // Urutkan soal MC/TF berdasarkan urutan penyajian ke siswa (order asc), diikuti soal Essay
         const servedOrderMap = new Map<number, number>();
         attempt.attemp_answer.forEach((ans, idx) => {
             servedOrderMap.set(ans.questionId, ans.order ?? idx + 1);
         });
 
-        const orderedQuestions = [...eligibleQuestions].sort((a, b) => {
+        const orderedMcq = [...eligibleQuestions].sort((a, b) => {
             const orderA = servedOrderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;
             const orderB = servedOrderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER;
             if (orderA !== orderB) return orderA - orderB;
             return a.id - b.id;
         });
 
+        const orderedEssays = [...essayQuestions].sort((a, b) => {
+            const orderA = servedOrderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+            const orderB = servedOrderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+            if (orderA !== orderB) return orderA - orderB;
+            return a.id - b.id;
+        });
+
+        const orderedQuestions = [...orderedMcq, ...orderedEssays];
+
         const reviews = orderedQuestions.map((question, idx) => {
             const userAnswerRow = attempt.attemp_answer.find(
                 (ans) => ans.questionId === question.id
             );
 
-            const isCorrect = userAnswerRow
-                ? this.isAttemptAnswerCorrect(userAnswerRow, question)
-                : false;
+            const isEssay = question.type === 'Essay';
+            const isCorrect = isEssay
+                ? userAnswerRow?.is_correct ?? null
+                : userAnswerRow
+                  ? this.isAttemptAnswerCorrect(userAnswerRow, question)
+                  : false;
 
             const correctOptions = question.quiz_answer.filter(
                 (a) => a.is_correct
@@ -1438,13 +1675,22 @@ export class QuizRepository {
 
             return {
                 order: userAnswerRow?.order ?? idx + 1,
+                id: question.id,
                 questionId: question.id,
                 question: question.question,
                 type: question.type,
                 points: question.points,
                 difficulty: question.difficulty,
+                instructions: question.instructions ?? null,
                 isCorrect,
                 explanation: question.explanation,
+                studentAnswerText: userAnswerRow?.answer ?? null,
+                studentScore:
+                    userAnswerRow?.score !== null && userAnswerRow?.score !== undefined
+                        ? userAnswerRow.score
+                        : null,
+                feedback: userAnswerRow?.feedback ?? null,
+                gradedAt: userAnswerRow?.graded_at ?? null,
                 userAnswer: userAnswerIds,
                 correctAnswer: correctAnswerIds,
                 userAnswers,
@@ -1453,6 +1699,7 @@ export class QuizRepository {
                     id: a.id,
                     answer: a.answer,
                     isCorrect: a.is_correct,
+                    is_correct: a.is_correct,
                 })),
             };
         });
@@ -1461,7 +1708,13 @@ export class QuizRepository {
             attemptId: attempt.id,
             quizId: attempt.quizId,
             quizTitle: attempt.quiz.title,
-            score: metrics.percentage,
+            score: metrics.score,
+            finalScore: metrics.finalScore,
+            mcqScore: metrics.mcqScore,
+            hasEssay: metrics.hasEssay,
+            gradingStatus: metrics.gradingStatus,
+            totalEarnedPoints: metrics.totalEarnedPoints,
+            totalMaxPoints: metrics.totalMaxPoints,
             totalScore: 100,
             passingGrade: attempt.quiz.passing_grade,
             percentage: metrics.percentage,
@@ -1476,8 +1729,346 @@ export class QuizRepository {
             show_review: attempt.quiz.show_review,
             isGraded: attempt.is_graded,
             submittedAt: attempt.submitted_at,
+            questions: reviews,
             reviews,
             review: reviews,
         };
+    }
+
+    // === TEACHER GRADING ===
+
+    static async getQuizSubmissions(quizId: number) {
+        const quiz = await prisma.quiz.findUnique({
+            where: { id: quizId },
+            include: {
+                quiz_question: {
+                    include: { quiz_answer: true },
+                    orderBy: { id: 'asc' },
+                },
+            },
+        });
+
+        if (!quiz) {
+            throw new Error('Quiz not found');
+        }
+
+        const attempts = await prisma.quiz_Attempt.findMany({
+            where: {
+                quizId,
+                submitted_at: { not: null },
+            },
+            include: {
+                User: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        profileImage: true,
+                    },
+                },
+                attemp_answer: {
+                    include: {
+                        quiz_question: true,
+                        attemp_multiple_answer: {
+                            include: { quiz_answer: true },
+                        },
+                    },
+                },
+            },
+            orderBy: { submitted_at: 'desc' },
+        });
+
+        return attempts.map((attempt) => {
+            const metrics = this.computeAttemptMetrics({
+                ...attempt,
+                quiz,
+            });
+            const profileImage = this.formatProfileImageUrl(attempt.User.profileImage);
+            const userObj = {
+                id: attempt.User.id,
+                name: attempt.User.name,
+                email: attempt.User.email,
+                profileImage,
+            };
+
+            return {
+                attemptId: attempt.id,
+                quizId: quiz.id,
+                quizTitle: quiz.title,
+                passingGrade: quiz.passing_grade,
+                user: userObj,
+                studentName: userObj.name,
+                studentEmail: userObj.email,
+                studentAvatar: userObj.profileImage,
+                startedAt: attempt.started_at,
+                submittedAt: attempt.submitted_at,
+                isGraded: attempt.is_graded,
+                score: metrics.score,
+                mcqScore: metrics.mcqScore,
+                finalScore: metrics.finalScore,
+                totalQuestions: quiz.quiz_question.length,
+                essayCount: metrics.essayCount,
+                ungradedEssayCount: metrics.ungradedEssayCount,
+                gradingStatus: metrics.gradingStatus,
+            };
+        });
+    }
+
+    static async getAttemptForGrading(attemptId: number) {
+        const attempt = await prisma.quiz_Attempt.findUnique({
+            where: { id: attemptId },
+            include: {
+                User: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        profileImage: true,
+                    },
+                },
+                quiz: {
+                    include: {
+                        quiz_question: {
+                            include: { quiz_answer: true },
+                            orderBy: { id: 'asc' },
+                        },
+                    },
+                },
+                attemp_answer: {
+                    include: {
+                        quiz_question: true,
+                        attemp_multiple_answer: {
+                            include: { quiz_answer: true },
+                        },
+                    },
+                    orderBy: { order: 'asc' },
+                },
+            },
+        });
+
+        if (!attempt) {
+            throw new Error('Attempt tidak ditemukan');
+        }
+
+        const metrics = this.computeAttemptMetrics(attempt);
+        const profileImage = this.formatProfileImageUrl(attempt.User.profileImage);
+        const userObj = {
+            id: attempt.User.id,
+            name: attempt.User.name,
+            email: attempt.User.email,
+            profileImage,
+        };
+
+        const answerByQuestionId = new Map<number, (typeof attempt.attemp_answer)[0]>();
+        for (const ans of attempt.attemp_answer) {
+            answerByQuestionId.set(ans.questionId, ans);
+        }
+
+        const questions = attempt.quiz.quiz_question.map((q) => {
+            const ans = answerByQuestionId.get(q.id);
+            const isEssay = q.type === 'Essay';
+
+            const isCorrect = isEssay
+                ? ans?.is_correct ?? null
+                : ans
+                  ? this.isAttemptAnswerCorrect(ans, q)
+                  : false;
+
+            const computedScore = isEssay
+                ? ans?.score !== null && ans?.score !== undefined
+                    ? Number(ans.score)
+                    : null
+                : isCorrect
+                  ? q.points
+                  : 0;
+
+            const selectedAnswers = isEssay
+                ? []
+                : ans?.attemp_multiple_answer.map((ma) => ({
+                      id: ma.quiz_answer.id,
+                      answer: ma.quiz_answer.answer,
+                      isCorrect: ma.quiz_answer.is_correct,
+                  })) ?? [];
+
+            const allChoices = isEssay
+                ? []
+                : q.quiz_answer.map((choice) => ({
+                      id: choice.id,
+                      answer: choice.answer,
+                      isCorrect: choice.is_correct,
+                  }));
+
+            return {
+                answerId: ans?.id ?? 0,
+                id: q.id,
+                questionId: q.id,
+                question: q.question,
+                type: q.type,
+                maxPoints: q.points,
+                points: q.points,
+                instructions: q.instructions ?? null,
+                rubric: q.rubric ?? null,
+                studentAnswer: ans?.answer ?? null,
+                score: computedScore,
+                feedback: ans?.feedback ?? null,
+                gradedAt: ans?.graded_at ?? null,
+                isCorrect,
+                selectedAnswers,
+                allChoices,
+            };
+        });
+
+        return {
+            attemptId: attempt.id,
+            quizId: attempt.quizId,
+            quizTitle: attempt.quiz.title,
+            passingGrade: attempt.quiz.passing_grade,
+            user: userObj,
+            studentName: userObj.name,
+            studentEmail: userObj.email,
+            studentAvatar: userObj.profileImage,
+            startedAt: attempt.started_at,
+            submittedAt: attempt.submitted_at,
+            isGraded: attempt.is_graded,
+            score: metrics.score,
+            mcqScore: metrics.mcqScore,
+            finalScore: metrics.finalScore,
+            totalEarnedPoints: metrics.totalEarnedPoints,
+            totalMaxPoints: metrics.totalMaxPoints,
+            percentage: metrics.percentage,
+            gradingStatus: metrics.gradingStatus,
+            questions,
+        };
+    }
+
+    static async gradeEssayAttempt(attemptId: number, grades: GradeEssayItemInput[]) {
+        await prisma.$transaction(async (tx) => {
+            const attempt = await tx.quiz_Attempt.findUnique({
+                where: { id: attemptId },
+                include: {
+                    quiz: {
+                        include: {
+                            quiz_question: {
+                                include: { quiz_answer: true },
+                            },
+                        },
+                    },
+                    attemp_answer: {
+                        include: {
+                            attemp_multiple_answer: {
+                                include: { quiz_answer: true },
+                            },
+                        },
+                    },
+                },
+            });
+
+            if (!attempt) {
+                throw new Error('Attempt tidak ditemukan');
+            }
+            if (!attempt.submitted_at) {
+                throw new Error('Quiz belum di-submit oleh siswa');
+            }
+
+            const questionMap = new Map(
+                attempt.quiz.quiz_question.map((q) => [q.id, q])
+            );
+            const now = new Date();
+
+            for (const grade of grades) {
+                const question = questionMap.get(grade.questionId);
+                if (!question) {
+                    throw new Error(`Soal dengan ID ${grade.questionId} tidak ditemukan pada kuis ini`);
+                }
+                if (question.type !== 'Essay') {
+                    throw new Error(`Soal dengan ID ${grade.questionId} bukan bertipe Essay`);
+                }
+                if (grade.score < 0 || grade.score > question.points) {
+                    throw new Error(
+                        `Nilai untuk soal ID ${grade.questionId} harus antara 0 dan ${question.points}`
+                    );
+                }
+
+                await tx.attemp_Answer.upsert({
+                    where: {
+                        attemptId_questionId: {
+                            attemptId,
+                            questionId: grade.questionId,
+                        },
+                    },
+                    update: {
+                        score: grade.score,
+                        feedback: grade.feedback ?? null,
+                        graded_at: now,
+                        is_correct: grade.score >= question.points * 0.6,
+                    },
+                    create: {
+                        attemptId,
+                        questionId: grade.questionId,
+                        answer: null,
+                        score: grade.score,
+                        feedback: grade.feedback ?? null,
+                        graded_at: now,
+                        is_correct: grade.score >= question.points * 0.6,
+                    },
+                });
+            }
+
+            // Hitung ulang total nilai keseluruhan attempt
+            const refreshedAnswers = await tx.attemp_Answer.findMany({
+                where: { attemptId },
+                include: {
+                    attemp_multiple_answer: {
+                        include: { quiz_answer: true },
+                    },
+                },
+            });
+
+            const answerByQId = new Map(refreshedAnswers.map((a) => [a.questionId, a]));
+            const allQuestions = attempt.quiz.quiz_question;
+            const mcqQuestions = filterAdaptiveEligibleQuestions(allQuestions);
+            const essayQuestions = allQuestions.filter((q) => q.type === 'Essay');
+
+            let mcqEarnedPoints = 0;
+            for (const q of mcqQuestions) {
+                const ans = answerByQId.get(q.id);
+                if (ans && this.isAttemptAnswerCorrect(ans, q)) {
+                    mcqEarnedPoints += q.points ?? 1;
+                }
+            }
+
+            let essayEarnedPoints = 0;
+            let ungradedEssayCount = 0;
+            for (const q of essayQuestions) {
+                const ans = answerByQId.get(q.id);
+                if (ans && ans.score !== null && ans.score !== undefined) {
+                    essayEarnedPoints += Number(ans.score);
+                } else {
+                    ungradedEssayCount++;
+                }
+            }
+
+            const totalMaxPoints = allQuestions.reduce((sum, q) => sum + (q.points ?? 1), 0);
+            const totalEarnedPoints = mcqEarnedPoints + essayEarnedPoints;
+            const allEssaysGraded = ungradedEssayCount === 0;
+            const finalPercentage =
+                allEssaysGraded && totalMaxPoints > 0
+                    ? Math.round((totalEarnedPoints / totalMaxPoints) * 100)
+                    : null;
+
+            await tx.quiz_Attempt.update({
+                where: { id: attemptId },
+                data: {
+                    mcq_score: mcqQuestions.length > 0 ? mcqEarnedPoints : null,
+                    score: finalPercentage,
+                    is_graded: allEssaysGraded,
+                    grading_status: allEssaysGraded
+                        ? quiz_grading_status.GRADED
+                        : quiz_grading_status.WAITING_FOR_TEACHER,
+                },
+            });
+        });
+
+        return this.getAttemptForGrading(attemptId);
     }
 }

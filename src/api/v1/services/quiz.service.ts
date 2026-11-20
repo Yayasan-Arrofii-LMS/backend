@@ -4,6 +4,7 @@ import {
     AdaptiveAnswerInput,
     CreateQuestionInput,
     CreateQuizInput,
+    GradeEssayItemInput,
     StartQuizAttemptInput,
     SaveAnswerInput,
     SubmitQuizInput,
@@ -98,9 +99,6 @@ export class QuizService {
 
     // === Question ===
     static async createQuestion(quizId: number, data: CreateQuestionInput) {
-        if ((data.type as string) === 'Essay') {
-            throw new Error('Tipe soal Essay tidak didukung pada kuis adaptif. Gunakan MultipleChoice atau TrueFalse');
-        }
         await this.getQuizById(quizId);
         const created = await QuizRepository.createQuestion(quizId, data);
         const quiz = await QuizRepository.getQuizById(quizId);
@@ -112,9 +110,6 @@ export class QuizService {
     }
 
     static async updateQuestion(questionId: number, data: UpdateQuestionInput) {
-        if ((data.type as string) === 'Essay') {
-            throw new Error('Tipe soal Essay tidak didukung pada kuis adaptif. Gunakan MultipleChoice atau TrueFalse');
-        }
         const updated = await QuizRepository.updateQuestion(questionId, data);
         if (!updated) throw new Error('Question not found');
         const quiz = await QuizRepository.getQuizById(updated.quizId);
@@ -313,7 +308,11 @@ export class QuizService {
             } else {
                 throw new Error('Quiz belum di-submit');
             }
-        } else if (!attempt.is_graded) {
+        } else if (
+            !attempt.is_graded &&
+            !attempt.hasEssay &&
+            attempt.grading_status !== 'WAITING_FOR_TEACHER'
+        ) {
             await QuizRepository.submitQuiz(data.attemptId);
             attempt = await QuizRepository.getAttemptById(data.attemptId);
         }
@@ -323,11 +322,21 @@ export class QuizService {
         }
 
         return {
+            id: attempt.id,
             attemptId: attempt.id,
             quizId: attempt.quizId,
             quizTitle: attempt.quiz.title,
-            score: attempt.percentage,
+            score: attempt.score,
             percentage: attempt.percentage,
+            mcqScore: attempt.mcqScore,
+            mcq_score: attempt.mcqScore,
+            finalScore: attempt.finalScore,
+            final_score: attempt.finalScore,
+            hasEssay: attempt.hasEssay,
+            gradingStatus: attempt.gradingStatus,
+            grading_status: attempt.grading_status,
+            totalEarnedPoints: attempt.totalEarnedPoints,
+            totalMaxPoints: attempt.totalMaxPoints,
             totalScore: 100,
             passingGrade: attempt.quiz.passing_grade,
             isPassed: attempt.isPassed,
@@ -340,6 +349,7 @@ export class QuizService {
             showReview: attempt.quiz.show_review,
             show_review: attempt.quiz.show_review,
             isGraded: attempt.is_graded,
+            is_graded: attempt.is_graded,
             startedAt: attempt.started_at,
             submittedAt: attempt.submitted_at,
         };
@@ -398,12 +408,6 @@ export class QuizService {
 
         const questionsData = bulkCreate.questions;
 
-        for (const q of questionsData) {
-            if ((q.type as string) === 'Essay') {
-                throw new Error('Tipe soal Essay tidak didukung pada kuis adaptif. Gunakan MultipleChoice atau TrueFalse');
-            }
-        }
-
         const createdQuiz = await prisma.$transaction(async (tx) => {
             const quiz = await tx.quiz.create({
                 data: quizData,
@@ -418,12 +422,18 @@ export class QuizService {
                         points: questionData.points ?? 1,
                         difficulty,
                         difficulty_rating: getDifficultyRating(difficulty),
-                        explanation: questionData.explanation,
+                        explanation: questionData.explanation ?? null,
+                        instructions: questionData.instructions ?? null,
+                        rubric: questionData.rubric ?? null,
                         quizId: quiz.id,
                     },
                 });
 
-                if (questionData.answers && questionData.answers.length > 0) {
+                if (
+                    questionData.type !== 'Essay' &&
+                    questionData.answers &&
+                    questionData.answers.length > 0
+                ) {
                     await tx.quiz_Answer.createMany({
                         data: questionData.answers.map((a) => ({
                             answer: a.answer,
@@ -450,5 +460,18 @@ export class QuizService {
             ...createdQuiz,
             warnings,
         };
+    }
+
+    // === TEACHER GRADING ===
+    static async getQuizSubmissions(quizId: number) {
+        return QuizRepository.getQuizSubmissions(quizId);
+    }
+
+    static async getAttemptForGrading(attemptId: number) {
+        return QuizRepository.getAttemptForGrading(attemptId);
+    }
+
+    static async gradeEssayAttempt(attemptId: number, grades: GradeEssayItemInput[]) {
+        return QuizRepository.gradeEssayAttempt(attemptId, grades);
     }
 }

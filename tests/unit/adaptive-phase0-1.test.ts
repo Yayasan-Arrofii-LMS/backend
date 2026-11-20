@@ -109,20 +109,23 @@ describe('Fase 0 & Fase 1: Adaptive Quiz Foundation Tests', () => {
             expect(getDifficultyRating('Hard')).toBe(1);
         });
 
-        it('rejects Essay questions in createQuestionSchema, updateQuestionSchema, and bulkCreateQuestionsSchema', () => {
+        it('accepts Essay questions with optional answers/instructions/rubric and rejects invalid MultipleChoice', () => {
             expect(() =>
                 createQuestionSchema.parse({
                     question: 'Jelaskan proses fotosintesis!',
                     type: 'Essay',
                     points: 10,
+                    instructions: 'Jawab dengan jelas.',
+                    rubric: 'Sebutkan cahaya, air, dan CO2.',
                 })
-            ).toThrow();
+            ).not.toThrow();
 
             expect(() =>
                 updateQuestionSchema.parse({
                     type: 'Essay',
+                    rubric: 'Rubrik baru',
                 })
-            ).toThrow();
+            ).not.toThrow();
 
             expect(() =>
                 bulkCreateQuestionsSchema.parse({
@@ -140,6 +143,14 @@ describe('Fase 0 & Fase 1: Adaptive Quiz Foundation Tests', () => {
                             type: 'Essay',
                         },
                     ],
+                })
+            ).not.toThrow();
+
+            expect(() =>
+                createQuestionSchema.parse({
+                    question: 'Soal PG tanpa opsi',
+                    type: 'MultipleChoice',
+                    points: 10,
                 })
             ).toThrow();
         });

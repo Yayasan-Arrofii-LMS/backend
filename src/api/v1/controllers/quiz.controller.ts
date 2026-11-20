@@ -570,4 +570,105 @@ export class QuizController {
             });
         }
     }
+
+    // === TEACHER GRADING ===
+    static async getQuizSubmissions(req: Request, res: Response) {
+        try {
+            const quizId = parseInt(req.params.quizId);
+            if (isNaN(quizId)) {
+                return sendResponse({
+                    res,
+                    statusCode: 400,
+                    success: false,
+                    message: 'Invalid quiz ID',
+                    data: null,
+                });
+            }
+
+            const submissions = await QuizService.getQuizSubmissions(quizId);
+            return sendResponse({
+                res,
+                statusCode: 200,
+                success: true,
+                message: 'Quiz submissions retrieved',
+                data: submissions,
+            });
+        } catch (error) {
+            const message = (error as Error).message;
+            return sendResponse({
+                res,
+                statusCode: message === 'Quiz not found' ? 404 : 500,
+                success: false,
+                message,
+                data: null,
+            });
+        }
+    }
+
+    static async getAttemptForGrading(req: Request, res: Response) {
+        try {
+            const attemptId = parseInt(req.params.attemptId);
+            if (isNaN(attemptId)) {
+                return sendResponse({
+                    res,
+                    statusCode: 400,
+                    success: false,
+                    message: 'Invalid attempt ID',
+                    data: null,
+                });
+            }
+
+            const detail = await QuizService.getAttemptForGrading(attemptId);
+            return sendResponse({
+                res,
+                statusCode: 200,
+                success: true,
+                message: 'Attempt grading detail retrieved',
+                data: detail,
+            });
+        } catch (error) {
+            const message = (error as Error).message;
+            return sendResponse({
+                res,
+                statusCode: message.includes('tidak ditemukan') ? 404 : 500,
+                success: false,
+                message,
+                data: null,
+            });
+        }
+    }
+
+    static async gradeEssayAttempt(req: Request, res: Response) {
+        try {
+            const attemptId = parseInt(req.params.attemptId) || req.body?.attemptId;
+            if (!attemptId || isNaN(attemptId)) {
+                return sendResponse({
+                    res,
+                    statusCode: 400,
+                    success: false,
+                    message: 'Invalid attempt ID',
+                    data: null,
+                });
+            }
+
+            const updated = await QuizService.gradeEssayAttempt(attemptId, req.body.grades);
+            return sendResponse({
+                res,
+                statusCode: 200,
+                success: true,
+                message: 'Penilaian uraian berhasil disimpan',
+                data: updated,
+            });
+        } catch (error) {
+            const message = (error as Error).message;
+            const statusCode = message.includes('tidak ditemukan') ? 404 : 400;
+            return sendResponse({
+                res,
+                statusCode,
+                success: false,
+                message,
+                data: null,
+            });
+        }
+    }
 }
