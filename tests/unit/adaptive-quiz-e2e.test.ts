@@ -120,12 +120,12 @@ describe('Fase 3, 4, 5 & 6: End-to-End Adaptive Quiz & Remedial Recommendation F
         }
     });
 
-    it('rejects Essay questions in teacher bulk-create endpoint with 400', async () => {
+    it('accepts Essay questions in teacher bulk-create endpoint with 201', async () => {
         const res = await supertest(app)
             .post(`/api/v1/classes/sections/${sectionId}/quizzes/bulk-create`)
             .set('Authorization', `Bearer ${teacherToken}`)
             .send({
-                title: 'Kuis Invalid Essay',
+                title: 'Kuis Essay Valid',
                 description: 'Kuis dengan soal essay',
                 max_attempts: 2,
                 time_limit: 30,
@@ -137,12 +137,17 @@ describe('Fase 3, 4, 5 & 6: End-to-End Adaptive Quiz & Remedial Recommendation F
                     {
                         question: 'Jelaskan fotosintesis!',
                         type: 'Essay',
+                        instructions: 'Tulis minimal 2 kalimat',
+                        rubric: 'Sebutkan sinar matahari dan klorofil',
                     },
                 ],
             });
 
-        expect(res.status).toBe(400);
-        expect(res.body.success).toBe(false);
+        expect(res.status).toBe(201);
+        expect(res.body.success).toBe(true);
+        if (res.body.data?.id) {
+            await prisma.quiz.deleteMany({ where: { id: res.body.data.id } });
+        }
     });
 
     it('runs full adaptive quiz lifecycle: bulk-create -> start -> resume -> answer 1-by-1 -> anti-double-click -> result -> review -> remedial recommendation', async () => {

@@ -27,14 +27,27 @@ export type UpdateQuizInput = Partial<CreateQuizInput>;
 
 export type CreateQuestionInput = {
     question: string;
-    type: "MultipleChoice" | "TrueFalse";
+    type: "MultipleChoice" | "TrueFalse" | "Essay";
     difficulty?: QuestionDifficulty;
     points?: number;
-    explanation?: string;
+    explanation?: string | null;
+    instructions?: string | null;
+    rubric?: string | null;
     answers?: { answer: string; is_correct: boolean }[];
 };
 
 export type UpdateQuestionInput = Partial<CreateQuestionInput>;
+
+export type GradeEssayItemInput = {
+    questionId: number;
+    score: number;
+    feedback?: string | null;
+};
+
+export type GradeEssayAttemptInput = {
+    attemptId?: number;
+    grades: GradeEssayItemInput[];
+};
 
 export type StartQuizAttemptInput = {
     quizId: number;

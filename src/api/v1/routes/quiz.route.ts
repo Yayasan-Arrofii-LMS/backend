@@ -12,6 +12,7 @@ import {
     adaptiveAnswerSchema,
     submitQuizSchema,
     bulkCreateQuestionsSchema,
+    gradeEssayAttemptSchema,
 } from '../schemas/quiz.schema';
 
 const router = Router({ mergeParams: true });
@@ -92,6 +93,40 @@ router.get(
     '/attempts/:attemptId/review',
     authMiddleware,
     QuizController.getQuizReview
+);
+
+// === TEACHER/ADMIN GRADING ROUTES ===
+// Get all quiz submissions for teacher grading
+router.get(
+    '/:quizId/submissions',
+    authMiddleware,
+    verifyRole(['Teacher', 'Admin']),
+    QuizController.getQuizSubmissions
+);
+
+// Get single attempt detail for teacher grading
+router.get(
+    '/attempts/:attemptId/grading',
+    authMiddleware,
+    verifyRole(['Teacher', 'Admin']),
+    QuizController.getAttemptForGrading
+);
+
+// Submit essay grades for an attempt (POST & PATCH supported)
+router.post(
+    '/attempts/:attemptId/grade',
+    authMiddleware,
+    verifyRole(['Teacher', 'Admin']),
+    validateBody(gradeEssayAttemptSchema),
+    QuizController.gradeEssayAttempt
+);
+
+router.patch(
+    '/attempts/:attemptId/grade',
+    authMiddleware,
+    verifyRole(['Teacher', 'Admin']),
+    validateBody(gradeEssayAttemptSchema),
+    QuizController.gradeEssayAttempt
 );
 
 // === TEACHER/ADMIN ROUTES ===
