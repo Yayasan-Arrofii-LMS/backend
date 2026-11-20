@@ -1,7 +1,15 @@
 import { Router } from 'express';
 import { AuthController } from '../controllers/auth.controller';
 import { validateBody } from '../middlewares/schema.middleware';
-import { forgotPasswordSchema, loginSchema, OTPSchema, registerSchema, resendOTPSchema, resetPasswordSchema } from '../schemas/auth.schema';
+import {
+    changePasswordSchema,
+    forgotPasswordSchema,
+    loginSchema,
+    OTPSchema,
+    registerSchema,
+    resendOTPSchema,
+    resetPasswordSchema,
+} from '../schemas/auth.schema';
 import { authMiddleware } from '../middlewares/auth.middleware';
 
 const authRouter = Router();
@@ -14,5 +22,6 @@ authRouter.get('/verify-role', authMiddleware, authController.checkRole);
 authRouter.post('/resend-otp', validateBody(resendOTPSchema), authController.resendOTP);
 authRouter.post('/forgot-password', validateBody(forgotPasswordSchema), authController.forgotPassword);
 authRouter.patch('/reset-password', validateBody(resetPasswordSchema), authController.resetPassword);
+authRouter.post('/change-password', authMiddleware, validateBody(changePasswordSchema), authController.changePassword);
 
 export default authRouter;
