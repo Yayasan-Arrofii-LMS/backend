@@ -28,12 +28,20 @@ const handleError = (res: Response, error: unknown, defaultMessage: string) => {
 
 export const getWorkshops = async (req: Request, res: Response) => {
     try {
-        const data = await workshopService.getAllWorkshops({
-            category: req.query.category as string | undefined,
-            type: req.query.type as string | undefined,
-            status: req.query.status as string | undefined,
-            search: req.query.search as string | undefined,
-        });
+        const data = await workshopService.getAllWorkshops(
+            {
+                category: req.query.category as string | undefined,
+                type: req.query.type as string | undefined,
+                status: req.query.status as string | undefined,
+                approvalStatus: req.query.approvalStatus as string | undefined,
+                instructorId: req.query.instructorId as string | undefined,
+                search: req.query.search as string | undefined,
+            },
+            {
+                userId: req.user?.id,
+                role: req.role,
+            }
+        );
         return sendResponse({ res, statusCode: 200, success: true, message: "Workshops retrieved successfully", data });
     } catch (error) {
         return handleError(res, error, "Failed to retrieve workshops");
@@ -42,11 +50,29 @@ export const getWorkshops = async (req: Request, res: Response) => {
 
 export const getWorkshopById = async (req: Request, res: Response) => {
     try {
-        const workshop = await workshopService.getWorkshopById(parseInt(req.params.id));
-        if (!workshop) {
-            return sendResponse({ res, statusCode: 404, success: false, message: "Workshop tidak ditemukan", data: null });
+        const result = await workshopService.getWorkshopByIdWithVisibility(
+            parseInt(req.params.id),
+            {
+                userId: req.user?.id,
+                role: req.role,
+            }
+        );
+        if ("error" in result && result.error) {
+            return sendResponse({
+                res,
+                statusCode: result.statusCode,
+                success: false,
+                message: result.error,
+                data: null,
+            });
         }
-        return sendResponse({ res, statusCode: 200, success: true, message: "Workshop retrieved successfully", data: workshop });
+        return sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: "Workshop retrieved successfully",
+            data: result.data,
+        });
     } catch (error) {
         return handleError(res, error, "Failed to retrieve workshop");
     }
@@ -56,7 +82,11 @@ export const createWorkshop = async (req: Request, res: Response) => {
     try {
         const uploadedPath = await resolveUploadedThumbnail(req);
         const thumbnail = uploadedPath || req.body.thumbnail || "files/public/placeholder.png";
-        const workshop = await workshopService.createWorkshop(req.user!.id!, { ...req.body, thumbnail });
+        const workshop = await workshopService.createWorkshop(
+            req.user!.id!,
+            { ...req.body, thumbnail },
+            req.role
+        );
         return sendResponse({ res, statusCode: 201, success: true, message: "Workshop created successfully", data: workshop });
     } catch (error) {
         return handleError(res, error, "Failed to create workshop");
@@ -121,13 +151,54 @@ export const deleteWorkshop = async (req: Request, res: Response) => {
     }
 };
 
+export const approveWorkshop = async (req: Request, res: Response) => {
+    try {
+        const workshopId = parseInt(req.params.id);
+        if (isNaN(workshopId)) {
+            return sendResponse({ res, statusCode: 400, success: false, message: "Invalid workshop ID", data: null });
+        }
+
+        const approved = await workshopService.approveWorkshop(workshopId, req.user!.id!);
+        if (!approved) {
+            return sendResponse({ res, statusCode: 404, success: false, message: "Workshop tidak ditemukan", data: null });
+        }
+        return sendResponse({ res, statusCode: 200, success: true, message: "Workshop berhasil disetujui", data: approved });
+    } catch (error) {
+        return handleError(res, error, "Gagal menyetujui workshop");
+    }
+};
+
+export const rejectWorkshop = async (req: Request, res: Response) => {
+    try {
+        const workshopId = parseInt(req.params.id);
+        if (isNaN(workshopId)) {
+            return sendResponse({ res, statusCode: 400, success: false, message: "Invalid workshop ID", data: null });
+        }
+
+        const reason = req.body?.reason ?? req.body?.rejectionReason ?? null;
+        const rejected = await workshopService.rejectWorkshop(workshopId, req.user!.id!, reason);
+        if (!rejected) {
+            return sendResponse({ res, statusCode: 404, success: false, message: "Workshop tidak ditemukan", data: null });
+        }
+        return sendResponse({ res, statusCode: 200, success: true, message: "Workshop berhasil ditolak", data: rejected });
+    } catch (error) {
+        return handleError(res, error, "Gagal menolak workshop");
+    }
+};
+
 export const registerWorkshop = async (req: Request, res: Response) => {
     try {
         const result = await workshopService.registerParticipant(parseInt(req.params.id), req.user!.id!, req.body?.notes);
         if ("error" in result) {
             return sendResponse({ res, statusCode: result.statusCode, success: false, message: result.error!, data: null });
         }
-        return sendResponse({ res, statusCode: 200, success: true, message: "Berhasil mendaftar workshop", data: result.data });
+        return sendResponse({
+            res,
+            statusCode: 200,
+            success: true,
+            message: "Pendaftaran workshop berhasil diajukan dan menunggu persetujuan",
+            data: result.data,
+        });
     } catch (error) {
         return handleError(res, error, "Gagal mendaftar workshop");
     }
@@ -169,5 +240,75 @@ export const getWorkshopParticipants = async (req: Request, res: Response) => {
         return sendResponse({ res, statusCode: 200, success: true, message: "Workshop participants retrieved successfully", data: participants });
     } catch (error) {
         return handleError(res, error, "Failed to retrieve workshop participants");
+    }
+};
+
+export const approveWorkshopParticipant = async (req: Request, res: Response) => {
+    try {
+        const workshopId = parseInt(req.params.id);
+        const participantId = parseInt(req.params.participantId);
+        if (isNaN(workshopId) || isNaN(participantId)) {
+            return sendResponse({ res, statusCode: 400, success: false, message: "Invalid workshop or participant ID", data: null });
+        }
+
+        const existing = await workshopService.getWorkshopById(workshopId);
+        if (!existing) {
+            return sendResponse({ res, statusCode: 404, success: false, message: "Workshop tidak ditemukan", data: null });
+        }
+        if (req.role !== "Admin" && existing.instructorId !== req.user!.id) {
+            return sendResponse({
+                res,
+                statusCode: 403,
+                success: false,
+                message: "Anda tidak memiliki izin untuk mengelola workshop ini",
+                data: null,
+            });
+        }
+
+        const result = await workshopService.approveParticipant(workshopId, participantId, req.user!.id!);
+        if ("error" in result && result.error) {
+            return sendResponse({ res, statusCode: result.statusCode, success: false, message: result.error, data: null });
+        }
+        return sendResponse({ res, statusCode: 200, success: true, message: "Peserta workshop berhasil disetujui", data: result.data });
+    } catch (error) {
+        return handleError(res, error, "Gagal menyetujui peserta workshop");
+    }
+};
+
+export const rejectWorkshopParticipant = async (req: Request, res: Response) => {
+    try {
+        const workshopId = parseInt(req.params.id);
+        const participantId = parseInt(req.params.participantId);
+        if (isNaN(workshopId) || isNaN(participantId)) {
+            return sendResponse({ res, statusCode: 400, success: false, message: "Invalid workshop or participant ID", data: null });
+        }
+
+        const existing = await workshopService.getWorkshopById(workshopId);
+        if (!existing) {
+            return sendResponse({ res, statusCode: 404, success: false, message: "Workshop tidak ditemukan", data: null });
+        }
+        if (req.role !== "Admin" && existing.instructorId !== req.user!.id) {
+            return sendResponse({
+                res,
+                statusCode: 403,
+                success: false,
+                message: "Anda tidak memiliki izin untuk mengelola workshop ini",
+                data: null,
+            });
+        }
+
+        const reason = req.body?.reason ?? req.body?.rejectionReason ?? null;
+        const result = await workshopService.rejectParticipant(
+            workshopId,
+            participantId,
+            req.user!.id!,
+            reason
+        );
+        if ("error" in result && result.error) {
+            return sendResponse({ res, statusCode: result.statusCode, success: false, message: result.error, data: null });
+        }
+        return sendResponse({ res, statusCode: 200, success: true, message: "Peserta workshop berhasil ditolak", data: result.data });
+    } catch (error) {
+        return handleError(res, error, "Gagal menolak peserta workshop");
     }
 };

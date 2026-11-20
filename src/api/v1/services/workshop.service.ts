@@ -1,5 +1,9 @@
+import { WorkshopApprovalStatus, WorkshopParticipantStatus } from "@prisma/client";
 import prisma from "../../../database";
-import workshopRepository, { WorkshopFilter } from "../repositories/workshop.repository";
+import workshopRepository, {
+    WorkshopFilter,
+    WorkshopRequester,
+} from "../repositories/workshop.repository";
 
 const formatMediaUrl = (path?: string | null): string | null => {
     if (!path) return null;
@@ -8,8 +12,31 @@ const formatMediaUrl = (path?: string | null): string | null => {
     return `${appUrl}/${path.replace(/^\//, "")}`;
 };
 
+export const formatParticipantDto = (p: any) => ({
+    id: String(p.id),
+    userId: p.userId,
+    userName: p.user.name,
+    userEmail: p.user.email,
+    userAvatar: formatMediaUrl(p.user.profileImage),
+    registrationDate: p.registrationDate.toISOString(),
+    status: p.status,
+    notes: p.notes ?? undefined,
+    rejectionReason: p.rejectionReason ?? undefined,
+    approvedById: p.approvedById ?? undefined,
+    approvedAt: p.approvedAt ? p.approvedAt.toISOString() : undefined,
+    approvedBy: p.approvedBy
+        ? {
+              id: p.approvedBy.id,
+              name: p.approvedBy.name,
+              email: p.approvedBy.email,
+          }
+        : undefined,
+});
+
 export const formatWorkshopDto = (workshop: any) => {
-    const activeCount = (workshop.participants || []).filter((p: any) => p.status === "Terdaftar").length;
+    const activeCount = (workshop.participants || []).filter(
+        (p: any) => p.status === WorkshopParticipantStatus.APPROVED
+    ).length;
 
     return {
         id: String(workshop.id),
@@ -31,23 +58,28 @@ export const formatWorkshopDto = (workshop: any) => {
         instructorAvatar: formatMediaUrl(workshop.instructor.profileImage),
         instructorBio: "Guru / Instruktur Sekolah Alam",
         status: workshop.status,
-        participants: (workshop.participants || []).map((p: any) => ({
-            id: String(p.id),
-            userId: p.userId,
-            userName: p.user.name,
-            userEmail: p.user.email,
-            userAvatar: formatMediaUrl(p.user.profileImage),
-            registrationDate: p.registrationDate.toISOString(),
-            status: p.status,
-            notes: p.notes ?? undefined,
-        })),
+        approvalStatus: workshop.approvalStatus,
+        rejectionReason: workshop.rejectionReason ?? undefined,
+        approvedById: workshop.approvedById ?? undefined,
+        approvedAt: workshop.approvedAt ? workshop.approvedAt.toISOString() : undefined,
+        approvedBy: workshop.approvedBy
+            ? {
+                  id: workshop.approvedBy.id,
+                  name: workshop.approvedBy.name,
+                  email: workshop.approvedBy.email,
+              }
+            : undefined,
+        participants: (workshop.participants || []).map(formatParticipantDto),
         createdAt: workshop.createdAt.toISOString(),
         updatedAt: workshop.updatedAt.toISOString(),
     };
 };
 
 class WorkshopService {
-    private async resolveCategoryId(categoryId?: number | null, categoryName?: string): Promise<number | null | undefined> {
+    private async resolveCategoryId(
+        categoryId?: number | null,
+        categoryName?: string
+    ): Promise<number | null | undefined> {
         if (categoryId !== undefined && categoryId !== null) {
             const cat = await prisma.category.findUnique({ where: { id: Number(categoryId) } });
             if (!cat) throw new Error("Category not found");
@@ -61,8 +93,8 @@ class WorkshopService {
         return categoryId === null ? null : undefined;
     }
 
-    async getAllWorkshops(filters: WorkshopFilter) {
-        const workshops = await workshopRepository.findAll(filters);
+    async getAllWorkshops(filters: WorkshopFilter, requester?: WorkshopRequester) {
+        const workshops = await workshopRepository.findAll(filters, requester);
         return workshops.map(formatWorkshopDto);
     }
 
@@ -71,8 +103,29 @@ class WorkshopService {
         return workshop ? formatWorkshopDto(workshop) : null;
     }
 
-    async createWorkshop(instructorId: string, data: any) {
+    async getWorkshopByIdWithVisibility(id: number, requester?: WorkshopRequester) {
+        const workshop = await workshopRepository.findById(id);
+        if (!workshop) {
+            return { error: "Workshop tidak ditemukan", statusCode: 404 as const };
+        }
+
+        if (workshop.approvalStatus !== WorkshopApprovalStatus.APPROVED) {
+            const isAdmin = requester?.role === "Admin";
+            const isOwner = requester?.userId && workshop.instructorId === requester.userId;
+            if (!isAdmin && !isOwner) {
+                return {
+                    error: "Workshop belum disetujui oleh Admin",
+                    statusCode: requester?.userId ? (403 as const) : (404 as const),
+                };
+            }
+        }
+
+        return { data: formatWorkshopDto(workshop), statusCode: 200 as const };
+    }
+
+    async createWorkshop(instructorId: string, data: any, creatorRole?: string) {
         const categoryId = await this.resolveCategoryId(data.categoryId, data.category);
+        const isAdmin = creatorRole === "Admin";
         const workshop = await workshopRepository.create({
             title: data.title,
             description: data.description,
@@ -85,6 +138,11 @@ class WorkshopService {
             meetingLink: data.meetingLink,
             quota: Number(data.quota),
             status: data.status || "Upcoming",
+            approvalStatus: isAdmin
+                ? WorkshopApprovalStatus.APPROVED
+                : WorkshopApprovalStatus.PENDING_APPROVAL,
+            approvedById: isAdmin ? instructorId : null,
+            approvedAt: isAdmin ? new Date() : null,
             categoryId: categoryId ?? null,
             instructorId,
         });
@@ -98,7 +156,18 @@ class WorkshopService {
         const categoryId = await this.resolveCategoryId(data.categoryId, data.category);
         const payload: Record<string, any> = {};
 
-        for (const f of ["title", "description", "thumbnail", "date", "startTime", "endTime", "type", "location", "meetingLink", "status"]) {
+        for (const f of [
+            "title",
+            "description",
+            "thumbnail",
+            "date",
+            "startTime",
+            "endTime",
+            "type",
+            "location",
+            "meetingLink",
+            "status",
+        ]) {
             if (data[f] !== undefined) payload[f] = data[f];
         }
         if (data.quota !== undefined) payload.quota = Number(data.quota);
@@ -115,6 +184,30 @@ class WorkshopService {
         return true;
     }
 
+    async approveWorkshop(id: number, adminId: string) {
+        const existing = await workshopRepository.findById(id);
+        if (!existing) return null;
+        const updated = await workshopRepository.updateWorkshopApprovalStatus(
+            id,
+            WorkshopApprovalStatus.APPROVED,
+            adminId,
+            null
+        );
+        return formatWorkshopDto(updated);
+    }
+
+    async rejectWorkshop(id: number, adminId: string, rejectionReason?: string | null) {
+        const existing = await workshopRepository.findById(id);
+        if (!existing) return null;
+        const updated = await workshopRepository.updateWorkshopApprovalStatus(
+            id,
+            WorkshopApprovalStatus.REJECTED,
+            adminId,
+            rejectionReason ?? null
+        );
+        return formatWorkshopDto(updated);
+    }
+
     async registerParticipant(workshopId: number, userId: string, notes?: string) {
         const workshop = await workshopRepository.findById(workshopId);
         if (!workshop) return { error: "Workshop tidak ditemukan", statusCode: 404 };
@@ -126,9 +219,25 @@ class WorkshopService {
             };
         }
 
+        if (workshop.approvalStatus !== WorkshopApprovalStatus.APPROVED) {
+            return {
+                error: "Workshop belum disetujui oleh Admin",
+                statusCode: 400,
+            };
+        }
+
         const existing = await workshopRepository.findParticipant(workshopId, userId);
-        if (existing && existing.status === "Terdaftar") {
-            return { error: "Anda sudah terdaftar di workshop ini", statusCode: 400 };
+        if (existing) {
+            if (existing.status === WorkshopParticipantStatus.APPROVED) {
+                return { error: "Anda sudah terdaftar di workshop ini", statusCode: 400 };
+            }
+            if (existing.status === WorkshopParticipantStatus.PENDING_APPROVAL) {
+                return {
+                    error: "Pendaftaran Anda sedang menunggu persetujuan",
+                    statusCode: 400,
+                };
+            }
+            // REJECTED or CANCELLED -> allowed to re-register (resets to PENDING_APPROVAL)
         }
 
         const count = await workshopRepository.countActiveParticipants(workshopId);
@@ -143,13 +252,47 @@ class WorkshopService {
 
     async cancelRegistration(workshopId: number, userId: string) {
         const existing = await workshopRepository.findParticipant(workshopId, userId);
-        if (!existing || existing.status !== "Terdaftar") {
+        if (
+            !existing ||
+            (existing.status !== WorkshopParticipantStatus.APPROVED &&
+                existing.status !== WorkshopParticipantStatus.PENDING_APPROVAL)
+        ) {
             return { error: "Pendaftaran tidak ditemukan atau sudah dibatalkan", statusCode: 404 };
         }
 
         await workshopRepository.cancelParticipant(workshopId, userId);
         const updated = await workshopRepository.findById(workshopId);
         return { data: formatWorkshopDto(updated!), statusCode: 200 };
+    }
+
+    async approveParticipant(workshopId: number, participantId: number, approverId: string) {
+        const result = await workshopRepository.approveParticipantAtomic(
+            workshopId,
+            participantId,
+            approverId
+        );
+        if ("error" in result && result.error) {
+            return { error: result.error, statusCode: result.statusCode };
+        }
+        return { data: formatParticipantDto(result.participant), statusCode: 200 as const };
+    }
+
+    async rejectParticipant(
+        workshopId: number,
+        participantId: number,
+        approverId: string,
+        rejectionReason?: string | null
+    ) {
+        const result = await workshopRepository.rejectParticipant(
+            workshopId,
+            participantId,
+            approverId,
+            rejectionReason ?? null
+        );
+        if ("error" in result && result.error) {
+            return { error: result.error, statusCode: result.statusCode };
+        }
+        return { data: formatParticipantDto(result.participant), statusCode: 200 as const };
     }
 
     async getParticipants(workshopId: number) {

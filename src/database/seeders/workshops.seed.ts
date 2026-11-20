@@ -1,3 +1,4 @@
+import { WorkshopApprovalStatus, WorkshopParticipantStatus } from "@prisma/client";
 import prisma from "..";
 
 export const workshopsSeed = async () => {
@@ -88,9 +89,15 @@ export const workshopsSeed = async () => {
 
     for (const item of sampleWorkshops) {
         const existing = await prisma.workshop.findFirst({ where: { title: item.title } });
+        const workshopData = {
+            ...item,
+            approvalStatus: WorkshopApprovalStatus.APPROVED,
+            approvedById: instructor.id,
+            approvedAt: new Date(),
+        };
         const workshop = existing
-            ? await prisma.workshop.update({ where: { id: existing.id }, data: item })
-            : await prisma.workshop.create({ data: item });
+            ? await prisma.workshop.update({ where: { id: existing.id }, data: workshopData })
+            : await prisma.workshop.create({ data: workshopData });
 
         // Pastikan penyelenggara/instruktur tidak terdaftar sebagai peserta pada workshop sendiri
         await prisma.workshopParticipant.deleteMany({
@@ -109,11 +116,17 @@ export const workshopsSeed = async () => {
                         userId: quotaDemoParticipant.id,
                     },
                 },
-                update: { status: "Terdaftar" },
+                update: {
+                    status: WorkshopParticipantStatus.APPROVED,
+                    approvedById: instructor.id,
+                    approvedAt: new Date(),
+                },
                 create: {
                     workshopId: workshop.id,
                     userId: quotaDemoParticipant.id,
-                    status: "Terdaftar",
+                    status: WorkshopParticipantStatus.APPROVED,
+                    approvedById: instructor.id,
+                    approvedAt: new Date(),
                     notes: "Peserta perdana (kuota penuh)",
                 },
             });
@@ -133,11 +146,17 @@ export const workshopsSeed = async () => {
                     userId: siswaDemo.id,
                 },
             },
-            update: { status: "Terdaftar" },
+            update: {
+                status: WorkshopParticipantStatus.APPROVED,
+                approvedById: instructor.id,
+                approvedAt: new Date(),
+            },
             create: {
                 workshopId: openWorkshops[0].id,
                 userId: siswaDemo.id,
-                status: "Terdaftar",
+                status: WorkshopParticipantStatus.APPROVED,
+                approvedById: instructor.id,
+                approvedAt: new Date(),
                 notes: "Siswa aktif eksplorasi lapangan",
             },
         });
@@ -151,11 +170,17 @@ export const workshopsSeed = async () => {
                     userId: annisa.id,
                 },
             },
-            update: { status: "Terdaftar" },
+            update: {
+                status: WorkshopParticipantStatus.APPROVED,
+                approvedById: instructor.id,
+                approvedAt: new Date(),
+            },
             create: {
                 workshopId: openWorkshops[1].id,
                 userId: annisa.id,
-                status: "Terdaftar",
+                status: WorkshopParticipantStatus.APPROVED,
+                approvedById: instructor.id,
+                approvedAt: new Date(),
                 notes: "Minat permakultur mandiri",
             },
         });

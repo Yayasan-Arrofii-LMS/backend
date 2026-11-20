@@ -71,6 +71,19 @@ enum recommendation_feedback {
   not_relevant
 }
 
+enum WorkshopApprovalStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum WorkshopParticipantStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 model Role {
   id        Int      @id @default(autoincrement())
   name      String   @unique
@@ -105,6 +118,8 @@ model User {
   workshopsInstructed      Workshop[]               @relation("WorkshopInstructor")
   workshopParticipations   WorkshopParticipant[]
   approvedClasses          Class[]                  @relation("ClassApprover")
+  approvedWorkshops        Workshop[]               @relation("WorkshopApprover")
+  approvedParticipants     WorkshopParticipant[]    @relation("ParticipantApprover")
 }
 
 model Xp {
@@ -416,37 +431,46 @@ model FileToken {
 }
 
 model Workshop {
-  id           Int                   @id @default(autoincrement())
-  title        String
-  description  String                @db.LongText
-  thumbnail    String
-  date         String
-  startTime    String
-  endTime      String
-  type         String
-  location     String?
-  meetingLink  String?
-  quota        Int
-  status       String                @default("Upcoming")
-  categoryId   Int?
-  instructorId String
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
-  category     Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  instructor   User                  @relation("WorkshopInstructor", fields: [instructorId], references: [id], onDelete: Cascade)
-  participants WorkshopParticipant[]
+  id              Int                    @id @default(autoincrement())
+  title           String
+  description     String                 @db.LongText
+  thumbnail       String
+  date            String
+  startTime       String
+  endTime         String
+  type            String
+  location        String?
+  meetingLink     String?
+  quota           Int
+  status          String                 @default("Upcoming")
+  approvalStatus  WorkshopApprovalStatus @default(PENDING_APPROVAL)
+  rejectionReason String?                @db.Text
+  approvedById    String?
+  approvedAt      DateTime?
+  categoryId      Int?
+  instructorId    String
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  category        Category?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  instructor      User                   @relation("WorkshopInstructor", fields: [instructorId], references: [id], onDelete: Cascade)
+  approvedBy      User?                  @relation("WorkshopApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  participants    WorkshopParticipant[]
 }
 
 model WorkshopParticipant {
-  id               Int      @id @default(autoincrement())
+  id               Int                       @id @default(autoincrement())
   workshopId       Int
   userId           String
-  status           String   @default("Terdaftar")
+  status           WorkshopParticipantStatus @default(PENDING_APPROVAL)
   notes            String?
-  registrationDate DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  workshop         Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rejectionReason  String?                   @db.Text
+  approvedById     String?
+  approvedAt       DateTime?
+  registrationDate DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  workshop         Workshop                  @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  user             User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  approvedBy       User?                     @relation("ParticipantApprover", fields: [approvedById], references: [id], onDelete: SetNull)
 
   @@unique([workshopId, userId])
 }
